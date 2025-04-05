@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RFID Attendance System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>RFID Attendance System</h1>
+            <div class="battery-status">
+                <span>Battery Level: </span>
+                <div class="battery-level">100%</div>
+            </div>
+        </header>
+
+        <main>
+            <section class="scanner-section">
+                <h2>RFID Scanner</h2>
+                <div class="scanner-status">
+                    <div class="status-indicator active"></div>
+                    <span>Scanner Ready</span>
+                </div>
+                <div class="last-scan">
+                    <h3>Last Scan</h3>
+                    <p id="lastScanTime">No scans yet</p>
+                    <p id="lastStudent">No student data</p>
+                </div>
+                <!-- Hardware Simulator -->
+                <div class="simulator-section">
+                    <h3>Hardware Simulator</h3>
+                    <div class="simulator-controls">
+                        <div class="simulator-input">
+                            <label for="studentId">Student ID:</label>
+                            <input type="text" id="studentId" placeholder="Enter student ID">
+                            <button id="simulateScan">Simulate Scan</button>
+                        </div>
+                        <div class="simulator-status">
+                            <div class="simulator-battery">
+                                <label>Simulated Battery:</label>
+                                <input type="range" id="batteryLevel" min="0" max="100" value="100">
+                                <span id="batteryValue">100%</span>
+                            </div>
+                            <div class="simulator-solar">
+                                <label>Solar Panel Status:</label>
+                                <select id="solarStatus">
+                                    <option value="charging">Charging</option>
+                                    <option value="not-charging">Not Charging</option>
+                                    <option value="fault">Fault</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="attendance-section">
+                <h2>Today's Attendance</h2>
+                <div class="attendance-list">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Student ID</th>
+                                <th>Name</th>
+                                <th>Time In</th>
+                                <th>Time Out</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="attendanceTable">
+                            <!-- Attendance data will be populated here -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="settings-section">
+                <h2>System Settings</h2>
+                <div class="settings-grid">
+                    <div class="setting-item">
+                        <label>Solar Panel Status</label>
+                        <div class="status-indicator charging"></div>
+                    </div>
+                    <div class="setting-item">
+                        <label>Parent Notifications</label>
+                        <button id="toggleNotifications">Enabled</button>
+                    </div>
+                    <div class="setting-item">
+                        <label>Teacher Access</label>
+                        <button id="teacherLogin">Login</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
