@@ -2,6 +2,49 @@
 // API Configuration
 const API_BASE_URL = 'http://localhost:3000/api';
 
+// Authentication functions
+function checkAuth() {
+    const token = localStorage.getItem('teacherToken');
+    if (!token) {
+        window.location.href = '/login.html';
+        return false;
+    }
+    return true;
+}
+
+function logout() {
+    localStorage.removeItem('teacherToken');
+    localStorage.removeItem('teacherName');
+    localStorage.removeItem('teacherId');
+    window.location.href = '/login.html';
+}
+
+function updateUI() {
+    const teacherName = localStorage.getItem('teacherName');
+    const openLoginModalBtn = document.getElementById('openLoginModal');
+    const userInfo = document.querySelector('.user-info');
+    const logoutBtn = document.getElementById('logoutBtn');
+
+    if (teacherName) {
+        document.getElementById('teacherName').textContent = teacherName;
+        openLoginModalBtn.style.display = 'none';
+        userInfo.style.display = 'flex';
+        logoutBtn.addEventListener('click', logout);
+    } else {
+        openLoginModalBtn.style.display = 'block';
+        userInfo.style.display = 'none';
+    }
+}
+
+// Initialize the page
+document.addEventListener('DOMContentLoaded', () => {
+    if (!checkAuth()) {
+        return;
+    }
+    updateUI();
+    loadTodayAttendance();
+});
+
 // Store attendance records
 let attendanceRecords = [];
 
@@ -52,7 +95,7 @@ async function handleRFIDScan(studentId) {
 
 // Update the attendance table
 function updateAttendanceTable() {
-    const tableBody = document.getElementById('attendanceTable');
+    const tableBody = document.getElementById('attendanceList');
     tableBody.innerHTML = '';
 
     attendanceRecords.forEach(record => {
@@ -60,8 +103,8 @@ function updateAttendanceTable() {
         row.innerHTML = `
             <td>${record.student_id}</td>
             <td>${record.name}</td>
+            <td>${record.grade}</td>
             <td>${new Date(record.time).toLocaleTimeString()}</td>
-            <td>${record.time_out ? new Date(record.time_out).toLocaleTimeString() : '-'}</td>
             <td>${record.status}</td>
         `;
         tableBody.appendChild(row);
@@ -193,24 +236,36 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // Teacher login button
-    document.getElementById('teacherLogin').addEventListener('click', () => {
-        const password = prompt('Enter teacher password:');
-        if (password === 'teacher123') {
-            alert('Login successful! Teacher access granted.');
-        } else {
-            alert('Invalid password');
-        }
-    });
-
     // Toggle notifications button
     document.getElementById('toggleNotifications').addEventListener('click', function() {
         this.textContent = this.textContent === 'Enabled' ? 'Disabled' : 'Enabled';
     });
 
+    // Set default date range (today)
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('startDate').value = today;
+    document.getElementById('endDate').value = today;
+
     // Load today's attendance
     await loadTodayAttendance();
 });
+
+async function loadAttendanceByDateRange(startDate, endDate) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/attendance/range?start=${startDate}&end=${endDate}`);
+        if (response.ok) {
+            const newRecords = await response.json();
+            attendanceRecords = newRecords;
+            updateAttendanceTable();
+        } else {
+            const data = await response.json();
+            alert('Error loading attendance: ' + (data.message || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error loading attendance:', error);
+        alert('Error loading attendance: ' + error.message);
+    }
+}
 
 // Modal functionality
 const modal = document.getElementById('addStudentModal');
@@ -312,10 +367,10 @@ addStudentForm.addEventListener('submit', async function(e) {
     }
 
     const formData = {
-        student_id: studentId,
-        name: name,
-        grade: grade,
-        parent_phone: parentPhone
+        student_id: studentId.trim(),
+        name: name.trim(),
+        grade: grade.trim(),
+        parent_phone: parentPhone.trim()
     };
     console.log('Form data:', formData);
 
@@ -324,7 +379,8 @@ addStudentForm.addEventListener('submit', async function(e) {
         const response = await fetch(`${API_BASE_URL}/students`, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
             },
             body: JSON.stringify(formData)
         });
@@ -350,5 +406,51 @@ addStudentForm.addEventListener('submit', async function(e) {
         console.error('Error:', error);
         messageDiv.textContent = 'Error connecting to server';
         messageDiv.className = 'message error';
+    }
+});
+
+document.getElementById('addStudentBtn').addEventListener('click', () => {
+    const modal = document.getElementById('addStudentModal');
+    modal.style.display = 'block';
+    modal.setAttribute('aria-hidden', 'false');
+    document.getElementById('newStudentId').focus();
+});
+
+document.getElementById('closeModal').addEventListener('click', () => {
+    const modal = document.getElementById('addStudentModal');
+    modal.style.display = 'none';
+    modal.setAttribute('aria-hidden', 'true');
+});
+
+document.getElementById('openLoginModal').addEventListener('click', () => {
+    document.getElementById('loginModal').style.display = 'block';
+});
+
+document.getElementById('closeLoginModal').addEventListener('click', () => {
+    document.getElementById('loginModal').style.display = 'none';
+});
+
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+
+    const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+    });
+
+    const result = await response.json();
+    const messageDiv = document.getElementById('loginMessage');
+    if (result.success) {
+        messageDiv.className = 'message success';
+        messageDiv.textContent = 'Login successful!';
+        setTimeout(() => {
+            document.getElementById('loginModal').style.display = 'none';
+        }, 1000);
+    } else {
+        messageDiv.className = 'message error';
+        messageDiv.textContent = 'Invalid username or password.';
     }
 });

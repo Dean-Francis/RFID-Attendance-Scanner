@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parent Dashboard - RFID Attendance System</title>
+    <link rel="stylesheet" type="text/css" href="styles.css">
+    <style>
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 2rem;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .welcome-section {
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #eee;
+        }
+
+        .student-info {
+            background: #f8f9fa;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+        }
+
+        .attendance-section {
+            margin-bottom: 2rem;
+        }
+
+        .attendance-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        .attendance-table th,
+        .attendance-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        .attendance-table th {
+            background-color: #1a237e;
+            color: white;
+        }
+
+        .attendance-table tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+
+        .status-badge {
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .status-in {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .status-out {
+            background-color: #fbe9e7;
+            color: #d84315;
+        }
+
+        .notifications {
+            margin-top: 2rem;
+        }
+
+        .notification-item {
+            padding: 1rem;
+            border-left: 4px solid #1a237e;
+            background: #f8f9fa;
+            margin-bottom: 1rem;
+            border-radius: 0 4px 4px 0;
+        }
+
+        .notification-time {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .nav-menu {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .nav-link {
+            padding: 0.5rem 1rem;
+            color: #1a237e;
+            text-decoration: none;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+
+        .nav-link:hover {
+            background-color: #e8eaf6;
+        }
+
+        .logout-button {
+            margin-left: auto;
+            background-color: #f44336;
+        }
+
+        .logout-button:hover {
+            background-color: #d32f2f;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>RFID Attendance System</h1>
+    </div>
+
+    <div class="dashboard-container">
+        <div class="nav-menu">
+            <a href="#" class="nav-link" id="dashboardLink">Dashboard</a>
+            <a href="#" class="nav-link" id="profileLink">Profile</a>
+            <a href="#" class="nav-link" id="settingsLink">Settings</a>
+            <button class="button logout-button" id="logoutButton">Logout</button>
+        </div>
+
+        <div class="welcome-section">
+            <h2>Welcome, <span id="parentName">Parent</span></h2>
+        </div>
+
+        <div class="student-info">
+            <h3>Student Information</h3>
+            <div id="studentDetails">Loading...</div>
+        </div>
+
+        <div class="attendance-section">
+            <h3>Today's Attendance</h3>
+            <table class="attendance-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Status</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody id="attendanceTableBody">
+                    <tr>
+                        <td colspan="3">Loading attendance records...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="notifications">
+            <h3>Recent Notifications</h3>
+            <div id="notificationsList">
+                <div class="notification-item">
+                    <div class="notification-time">Loading notifications...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>© 2024 RFID Attendance System. All rights reserved.</p>
+    </div>
+    <script src="parent-dashboard.js"></script>
+</body>
+</html> 

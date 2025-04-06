@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teacher Registration - RFID Attendance System</title>
+    <link rel="stylesheet" type="text/css" href="styles.css">
+</head>
+<body>
+    <div class="header">
+        <h1>RFID Attendance System</h1>
+    </div>
+
+    <div class="form-container">
+        <h2 style="text-align: center; color: #1a237e; margin-bottom: 1.5rem;">Teacher Registration</h2>
+        <form id="registerForm">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <div class="form-group">
+                <label for="name">Full Name</label>
+                <input type="text" id="name" name="name" required>
+            </div>
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" required>
+            </div>
+            <button type="submit" class="button">Register</button>
+            <div id="errorMessage" class="error-message"></div>
+        </form>
+        <div class="link">
+            Already have an account? <a href="/login.html">Login here</a>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>© 2024 RFID Attendance System. All rights reserved.</p>
+    </div>
+    <script src="register.js"></script>
+</body>
+</html> 

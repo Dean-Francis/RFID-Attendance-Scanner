@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance Reports - RFID Attendance System</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Add jsPDF and its dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Attendance Reports</h1>
+            <div class="user-info">
+                Welcome, <span id="teacherName">Teacher</span>
+                <button id="logoutBtn">Logout</button>
+            </div>
+            <nav>
+                <a href="index.html">Dashboard</a>
+                <a href="reports.html" class="active">Reports</a>
+            </nav>
+        </header>
+
+        <main>
+            <section class="reports-section">
+                <div class="report-filters">
+                    <div class="date-range">
+                        <label for="startDate">From:</label>
+                        <input type="date" id="startDate">
+                        <label for="endDate">To:</label>
+                        <input type="date" id="endDate">
+                    </div>
+                    <div class="filter-options">
+                        <label for="gradeFilter">Grade:</label>
+                        <select id="gradeFilter">
+                            <option value="">All Grades</option>
+                            <option value="Grade 10">Grade 10</option>
+                            <option value="Grade 11">Grade 11</option>
+                            <option value="Grade 12">Grade 12</option>
+                        </select>
+                        <label for="statusFilter">Status:</label>
+                        <select id="statusFilter">
+                            <option value="">All Status</option>
+                            <option value="Present">Present</option>
+                            <option value="Late">Late</option>
+                            <option value="Absent">Absent</option>
+                        </select>
+                    </div>
+                    <div class="export-buttons">
+                        <button id="exportCSV" class="btn-export">Export CSV</button>
+                        <button id="exportPDF" class="btn-export">Export PDF</button>
+                    </div>
+                </div>
+
+                <div class="attendance-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Student ID</th>
+                                <th>Name</th>
+                                <th>Grade</th>
+                                <th>Date</th>
+                                <th>Time</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="attendanceList">
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="report-summary">
+                    <h3>Summary</h3>
+                    <div class="summary-stats">
+                        <div class="stat-item">
+                            <label>Total Students:</label>
+                            <span id="totalStudents">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <label>Present:</label>
+                            <span id="presentCount">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <label>Late:</label>
+                            <span id="lateCount">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <label>Absent:</label>
+                            <span id="absentCount">0</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="reports.js"></script>
+</body>
+</html> 
