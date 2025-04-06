@@ -176,17 +176,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Handle simulate scan button
     document.getElementById('simulateScan').addEventListener('click', function() {
-        const studentId = document.getElementById('studentId').value;
+        const studentId = document.getElementById('simulatorStudentId').value;
         if (studentId) {
             handleRFIDScan(studentId);
-            document.getElementById('studentId').value = ''; // Clear input after scan
+            document.getElementById('simulatorStudentId').value = ''; // Clear input after scan
         } else {
             alert('Please enter a student ID');
         }
     });
 
     // Handle Enter key in student ID input
-    document.getElementById('studentId').addEventListener('keypress', function(e) {
+    document.getElementById('simulatorStudentId').addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
             e.preventDefault();
             document.getElementById('simulateScan').click();
@@ -214,30 +214,35 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Modal functionality
 const modal = document.getElementById('addStudentModal');
-const openModalBtn = document.getElementById('openAddStudent');
-const closeModalBtn = document.querySelector('.close-modal');
+const openModalBtn = document.getElementById('addStudentBtn');
+const closeModalBtn = document.getElementById('closeModal');
+const addStudentForm = document.getElementById('addStudentForm');
+const messageDiv = document.getElementById('message');
 
 // Open modal
 openModalBtn.addEventListener('click', () => {
+    console.log('Opening modal');
     modal.style.display = 'block';
     document.body.style.overflow = 'hidden';
 });
 
 // Close modal
 closeModalBtn.addEventListener('click', () => {
+    console.log('Closing modal');
     modal.style.display = 'none';
     document.body.style.overflow = 'auto';
-    document.getElementById('addStudentForm').reset();
-    document.getElementById('addStudentMessage').textContent = '';
+    addStudentForm.reset();
+    messageDiv.textContent = '';
 });
 
 // Close modal when clicking outside
 window.addEventListener('click', (event) => {
     if (event.target === modal) {
+        console.log('Closing modal (clicked outside)');
         modal.style.display = 'none';
         document.body.style.overflow = 'auto';
-        document.getElementById('addStudentForm').reset();
-        document.getElementById('addStudentMessage').textContent = '';
+        addStudentForm.reset();
+        messageDiv.textContent = '';
     }
 });
 
@@ -252,132 +257,8 @@ async function checkStudentIdExists(studentId) {
     }
 }
 
-// Show confirmation modal
-function showConfirmation(studentData) {
-    const confirmationHtml = `
-        <div class="confirmation-content">
-            <h3>Confirm Student Details</h3>
-            <div class="confirmation-details">
-                <p><strong>Student ID:</strong> ${studentData.studentId}</p>
-                <p><strong>Name:</strong> ${studentData.name}</p>
-                <p><strong>Grade:</strong> ${studentData.grade}</p>
-                <p><strong>Parent Phone:</strong> ${studentData.parentPhone}</p>
-            </div>
-            <div class="confirmation-buttons">
-                <button id="confirmAdd" class="confirm-button">Confirm & Add</button>
-                <button id="cancelAdd" class="cancel-button">Cancel</button>
-            </div>
-        </div>
-    `;
-
-    const confirmationModal = document.createElement('div');
-    confirmationModal.className = 'modal';
-    confirmationModal.id = 'confirmationModal';
-    confirmationModal.innerHTML = confirmationHtml;
-    document.body.appendChild(confirmationModal);
-
-    // Show the confirmation modal
-    confirmationModal.style.display = 'block';
-
-    // Handle confirmation
-    document.getElementById('confirmAdd').addEventListener('click', async () => {
-        try {
-            const response = await fetch(`${API_BASE_URL}/students`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(studentData)
-            });
-            
-            const data = await response.json();
-            const messageDiv = document.getElementById('addStudentMessage');
-            
-            if (response.ok) {
-                messageDiv.textContent = 'Student added successfully!';
-                messageDiv.className = 'message success';
-                
-                // Close both modals and reset form after 2 seconds
-                setTimeout(() => {
-                    document.getElementById('addStudentForm').reset();
-                    modal.style.display = 'none';
-                    confirmationModal.remove();
-                    document.body.style.overflow = 'auto';
-                    messageDiv.textContent = '';
-                }, 2000);
-            } else {
-                messageDiv.textContent = data.message || 'Error adding student';
-                messageDiv.className = 'message error';
-                confirmationModal.remove();
-            }
-        } catch (error) {
-            console.error('Error:', error);
-            const messageDiv = document.getElementById('addStudentMessage');
-            messageDiv.textContent = 'Error adding student. Please try again.';
-            messageDiv.className = 'message error';
-            confirmationModal.remove();
-        }
-    });
-
-    // Handle cancellation
-    document.getElementById('cancelAdd').addEventListener('click', () => {
-        confirmationModal.remove();
-    });
-
-    // Close confirmation modal when clicking outside
-    confirmationModal.addEventListener('click', (event) => {
-        if (event.target === confirmationModal) {
-            confirmationModal.remove();
-        }
-    });
-}
-
-// Add new student form handler
-document.getElementById('addStudentForm').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    
-    const studentId = document.getElementById('newStudentId').value;
-    const name = document.getElementById('newStudentName').value;
-    const grade = document.getElementById('newStudentGrade').value;
-    const parentPhone = document.getElementById('newStudentPhone').value;
-    
-    // Validate student ID format (assuming it should be 6 digits)
-    if (!/^\d{6}$/.test(studentId)) {
-        const messageDiv = document.getElementById('addStudentMessage');
-        messageDiv.textContent = 'Student ID must be 6 digits';
-        messageDiv.className = 'message error';
-        return;
-    }
-    
-    // Validate UAE phone number format (05X XXX XXXX)
-    const phoneRegex = /^05[0-9] [0-9]{3} [0-9]{4}$/;
-    if (!phoneRegex.test(parentPhone)) {
-        const messageDiv = document.getElementById('addStudentMessage');
-        messageDiv.textContent = 'Phone number must be in UAE format: 05X XXX XXXX';
-        messageDiv.className = 'message error';
-        return;
-    }
-    
-    // Check if student ID already exists
-    const exists = await checkStudentIdExists(studentId);
-    if (exists) {
-        const messageDiv = document.getElementById('addStudentMessage');
-        messageDiv.textContent = 'Student ID already exists';
-        messageDiv.className = 'message error';
-        return;
-    }
-    
-    // Show confirmation modal
-    showConfirmation({
-        studentId,
-        name,
-        grade,
-        parentPhone
-    });
-});
-
 // Add phone number format helper
-document.getElementById('newStudentPhone').addEventListener('input', function(e) {
+document.getElementById('newParentPhone').addEventListener('input', function(e) {
     // Remove all non-digit characters
     let value = e.target.value.replace(/\D/g, '');
     
@@ -385,14 +266,89 @@ document.getElementById('newStudentPhone').addEventListener('input', function(e)
     if (value.length > 0) {
         // Ensure it starts with 05
         if (!value.startsWith('05')) {
-            value = '05' + value.substring(2);
+            value = '05';
+        } else {
+            // Format as 05X XXX XXXX
+            if (value.length > 3) {
+                value = value.substring(0, 3) + ' ' + value.substring(3);
+            }
+            if (value.length > 7) {
+                value = value.substring(0, 7) + ' ' + value.substring(7);
+            }
+            // Limit to 11 digits (05X XXX XXXX)
+            if (value.replace(/\D/g, '').length > 10) {
+                value = value.substring(0, 12);
+            }
         }
-        
-        // Format as 05X XXX XXXX
-        if (value.length > 2) value = value.substring(0, 3) + ' ' + value.substring(3);
-        if (value.length > 7) value = value.substring(0, 7) + ' ' + value.substring(7);
     }
     
     // Update the input value
     e.target.value = value;
+});
+
+// Add new student form handler
+addStudentForm.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    console.log('Form submitted');
+    
+    const studentId = document.getElementById('newStudentId').value;
+    const name = document.getElementById('newStudentName').value;
+    const grade = document.getElementById('newStudentGrade').value;
+    const parentPhone = document.getElementById('newParentPhone').value;
+    
+    // Validate student ID format (6 digits)
+    if (!/^\d{6}$/.test(studentId)) {
+        messageDiv.textContent = 'Student ID must be 6 digits';
+        messageDiv.className = 'message error';
+        return;
+    }
+    
+    // Validate UAE phone number format
+    const phoneRegex = /^05[0-9][\s-]?[0-9]{3}[\s-]?[0-9]{4}$/;
+    if (!phoneRegex.test(parentPhone)) {
+        messageDiv.textContent = 'Phone number must start with 05X followed by 7 digits (e.g. 050 123 4567 or 0501234567)';
+        messageDiv.className = 'message error';
+        return;
+    }
+
+    const formData = {
+        student_id: studentId,
+        name: name,
+        grade: grade,
+        parent_phone: parentPhone
+    };
+    console.log('Form data:', formData);
+
+    try {
+        console.log('Sending request to /api/students');
+        const response = await fetch(`${API_BASE_URL}/students`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(formData)
+        });
+        console.log('Request sent with data:', JSON.stringify(formData));
+        console.log('Response status:', response.status);
+        const data = await response.json();
+        console.log('Response data:', data);
+
+        if (response.ok) {
+            messageDiv.textContent = 'Student added successfully!';
+            messageDiv.className = 'message success';
+            addStudentForm.reset();
+            setTimeout(() => {
+                modal.style.display = 'none';
+                messageDiv.textContent = '';
+                document.body.style.overflow = 'auto';
+            }, 2000);
+        } else {
+            messageDiv.textContent = data.error || 'Error adding student';
+            messageDiv.className = 'message error';
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        messageDiv.textContent = 'Error connecting to server';
+        messageDiv.className = 'message error';
+    }
 });

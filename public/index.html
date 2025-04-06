@@ -33,8 +33,8 @@
                     <h3>Hardware Simulator</h3>
                     <div class="simulator-controls">
                         <div class="simulator-input">
-                            <label for="studentId">Student ID:</label>
-                            <input type="text" id="studentId" placeholder="Enter student ID">
+                            <label for="simulatorStudentId">Student ID:</label>
+                            <input type="text" id="simulatorStudentId" placeholder="Enter student ID">
                             <button id="simulateScan">Simulate Scan</button>
                         </div>
                         <div class="simulator-status">
@@ -91,10 +91,43 @@
                         <label>Teacher Access</label>
                         <button id="teacherLogin">Login</button>
                     </div>
+                    <div class="setting-item">
+                        <label>Student Management</label>
+                        <button id="addStudentBtn">Add New Student</button>
+                    </div>
                 </div>
             </section>
         </main>
     </div>
+
+    <!-- Add Student Modal -->
+    <div id="addStudentModal" class="modal">
+        <div class="modal-content">
+            <span id="closeModal" class="close">&times;</span>
+            <h2>Add New Student</h2>
+            <form id="addStudentForm">
+                <div class="form-group">
+                    <label for="newStudentId">Student ID:</label>
+                    <input type="text" id="newStudentId" name="studentId" required pattern="[0-9]{6}" title="6-digit Student ID">
+                </div>
+                <div class="form-group">
+                    <label for="newStudentName">Name:</label>
+                    <input type="text" id="newStudentName" name="studentName" required>
+                </div>
+                <div class="form-group">
+                    <label for="newStudentGrade">Grade:</label>
+                    <input type="text" id="newStudentGrade" name="studentGrade" required>
+                </div>
+                <div class="form-group">
+                    <label for="newParentPhone">Parent Phone:</label>
+                    <input type="tel" id="newParentPhone" name="parentPhone" required pattern="05[0-9] [0-9]{3} [0-9]{4}" title="Phone number must be in UAE format: 05X XXX XXXX">
+                </div>
+                <button type="submit">Add Student</button>
+            </form>
+            <div id="message"></div>
+        </div>
+    </div>
+
     <script src="script.js"></script>
 </body>
 </html>

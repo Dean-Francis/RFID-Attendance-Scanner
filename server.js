@@ -269,27 +269,115 @@ app.get('/api/attendance/today', (req, res) => {
                 res.status(500).json({ message: err.message });
                 return;
             }
-            res.json(results);
+            // Process the results to ensure correct status
+            const processedResults = results.map(record => ({
+                ...record,
+                status: record.time_out ? 'Checked Out' : 'Checked In'
+            }));
+            res.json(processedResults);
         }
     );
 });
 
 // Add new student
-app.post('/api/students', (req, res) => {
-    const student = {
-        student_id: req.body.studentId,
+app.post('/api/students', async (req, res) => {
+    console.log('Received request body:', req.body);
+    console.log('Request headers:', req.headers);
+    console.log('Content-Type:', req.headers['content-type']);
+    
+    // Check if the request body is empty
+    if (!req.body || Object.keys(req.body).length === 0) {
+        console.error('Empty request body received');
+        return res.status(400).json({ 
+            error: 'Empty request body',
+            details: 'No data was received in the request'
+        });
+    }
+    
+    // Extract and validate the data
+    const studentData = {
+        student_id: req.body.student_id,
         name: req.body.name,
         grade: req.body.grade,
-        parent_phone: req.body.parentPhone
+        parent_phone: req.body.parent_phone
     };
-    
-    connection.query('INSERT INTO students SET ?', student, (err, result) => {
-        if (err) {
-            res.status(400).json({ message: err.message });
-            return;
-        }
-        res.status(201).json(student);
-    });
+
+    console.log('Processed student data:', studentData);
+
+    // Validate all required fields
+    if (!studentData.student_id || !studentData.name || !studentData.grade || !studentData.parent_phone) {
+        console.log('Missing required fields:', studentData);
+        return res.status(400).json({ 
+            error: 'All fields are required',
+            details: {
+                student_id: !studentData.student_id ? 'Student ID is required' : null,
+                name: !studentData.name ? 'Name is required' : null,
+                grade: !studentData.grade ? 'Grade is required' : null,
+                parent_phone: !studentData.parent_phone ? 'Parent phone is required' : null
+            }
+        });
+    }
+
+    // Validate student ID format
+    if (!/^\d{6}$/.test(studentData.student_id)) {
+        return res.status(400).json({ 
+            error: 'Invalid student ID format',
+            details: 'Student ID must be 6 digits'
+        });
+    }
+
+    // Validate phone number format
+    const phoneRegex = /^05[0-9][\s-]?[0-9]{3}[\s-]?[0-9]{4}$/;
+    if (!phoneRegex.test(studentData.parent_phone)) {
+        return res.status(400).json({ 
+            error: 'Invalid phone number format',
+            details: 'Phone number must start with 05X followed by 7 digits. Spaces between groups are optional (e.g. 050 123 4567 or 0501234567)'
+        });
+    }
+
+    // Format the phone number to ensure consistent storage
+    studentData.parent_phone = studentData.parent_phone.replace(/[\s-]/g, ' ').replace(/(\d{3})(\d{3})(\d{4})/, '$1 $2 $3');
+
+    try {
+        console.log('Attempting to insert student into database with data:', studentData);
+        const query = 'INSERT INTO students (student_id, name, grade, parent_phone) VALUES (?, ?, ?, ?)';
+        const values = [
+            studentData.student_id.toString(), // Ensure string type
+            studentData.name,
+            studentData.grade,
+            studentData.parent_phone
+        ];
+        console.log('Executing query with values:', values);
+        
+        connection.query(query, values, (error, results) => {
+            if (error) {
+                console.error('Database error:', error);
+                if (error.code === 'ER_DUP_ENTRY') {
+                    return res.status(400).json({ 
+                        error: 'Student ID already exists',
+                        details: `Student ID ${studentData.student_id} is already registered`
+                    });
+                } else {
+                    return res.status(500).json({ 
+                        error: 'Database error',
+                        details: error.message
+                    });
+                }
+            }
+            
+            console.log('Student inserted successfully:', results);
+            return res.status(201).json({ 
+                message: 'Student added successfully',
+                student: studentData
+            });
+        });
+    } catch (error) {
+        console.error('Error in add student endpoint:', error);
+        return res.status(500).json({ 
+            error: 'Internal server error',
+            details: error.message
+        });
+    }
 });
 
 const PORT = process.env.PORT || 3000;
