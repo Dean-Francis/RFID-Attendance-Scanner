@@ -95,17 +95,28 @@ async function handleRFIDScan(studentId) {
 
 // Update the attendance table
 function updateAttendanceTable() {
-    const tableBody = document.getElementById('attendanceList');
+    const tableBody = document.getElementById('attendanceTableBody');
+    if (!tableBody) {
+        console.error('Attendance table body not found');
+        return;
+    }
+    
+    // Clear existing rows
     tableBody.innerHTML = '';
-
+    
+    // Add new rows
     attendanceRecords.forEach(record => {
         const row = document.createElement('tr');
+        const status = record.status || (record.time_out ? 'Checked Out' : 'Checked In');
+        const statusClass = `status-${status.toLowerCase().replace(/\s+/g, '-')}`;
+        
         row.innerHTML = `
             <td>${record.student_id}</td>
             <td>${record.name}</td>
             <td>${record.grade}</td>
             <td>${new Date(record.time).toLocaleTimeString()}</td>
-            <td>${record.status}</td>
+            <td>${record.time_out ? new Date(record.time_out).toLocaleTimeString() : '-'}</td>
+            <td class="${statusClass}">${status}</td>
         `;
         tableBody.appendChild(row);
     });
@@ -125,22 +136,20 @@ function sendParentNotification(student) {
 // Load today's attendance
 async function loadTodayAttendance() {
     try {
+        console.log('Fetching today\'s attendance...');
         const response = await fetch(`${API_BASE_URL}/attendance/today`);
-        if (response.ok) {
-            // Clear the existing records array
-            attendanceRecords = [];
-            // Load new records from the server
-            const newRecords = await response.json();
-            attendanceRecords = newRecords;
-            updateAttendanceTable();
-        } else {
-            const data = await response.json();
-            if (response.status === 503) {
-                alert('Database connection error. Please check if the database server is running.');
-            } else {
-                alert('Error loading attendance: ' + (data.message || 'Unknown error'));
-            }
+        const data = await response.json();
+        
+        if (!response.ok) {
+            console.error('Server error:', data);
+            throw new Error(`HTTP error! status: ${response.status}, message: ${data.message || 'Unknown error'}`);
         }
+
+        // Clear the existing records array
+        attendanceRecords = [];
+        // Load new records from the server
+        attendanceRecords = data;
+        updateAttendanceTable();
     } catch (error) {
         console.error('Error loading attendance:', error);
         if (error.message.includes('Failed to fetch')) {
@@ -241,10 +250,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         this.textContent = this.textContent === 'Enabled' ? 'Disabled' : 'Enabled';
     });
 
-    // Set default date range (today)
-    const today = new Date().toISOString().split('T')[0];
-    document.getElementById('startDate').value = today;
-    document.getElementById('endDate').value = today;
+    // Set default date range (today) - only if we're on the reports page
+    const startDateInput = document.getElementById('startDate');
+    const endDateInput = document.getElementById('endDate');
+    if (startDateInput && endDateInput) {
+        const today = new Date().toISOString().split('T')[0];
+        startDateInput.value = today;
+        endDateInput.value = today;
+    }
 
     // Load today's attendance
     await loadTodayAttendance();
@@ -351,9 +364,9 @@ addStudentForm.addEventListener('submit', async function(e) {
     const grade = document.getElementById('newStudentGrade').value;
     const parentPhone = document.getElementById('newParentPhone').value;
     
-    // Validate student ID format (6 digits)
-    if (!/^\d{6}$/.test(studentId)) {
-        messageDiv.textContent = 'Student ID must be 6 digits';
+    // Validate student ID is not empty
+    if (!studentId) {
+        messageDiv.textContent = 'Student ID is required';
         messageDiv.className = 'message error';
         return;
     }
