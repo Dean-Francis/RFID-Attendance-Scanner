@@ -71,19 +71,22 @@
             <section class="attendance-section">
                 <h2>Today's Attendance</h2>
                 <div class="attendance-list">
-                    <table>
+                    <div class="rfid-status">
+                        <div id="rfidStatus">RFID Reader: <span class="status-disconnected">Disconnected</span></div>
+                        <div id="lastScan">Last Scan: <span class="no-scan">No scans yet</span></div>
+                    </div>
+                    <table id="attendanceTable">
                         <thead>
                             <tr>
                                 <th>Student ID</th>
                                 <th>Name</th>
                                 <th>Grade</th>
-                                <th>Time</th>
+                                <th>Time In</th>
+                                <th>Time Out</th>
                                 <th>Status</th>
                             </tr>
                         </thead>
-                        <tbody id="attendanceList">
-                            <!-- Attendance data will be populated here -->
-                        </tbody>
+                        <tbody id="attendanceTableBody"></tbody>
                     </table>
                 </div>
             </section>
@@ -116,7 +119,7 @@
             <form id="addStudentForm">
                 <div class="form-group">
                     <label for="newStudentId">Student ID:</label>
-                    <input type="text" id="newStudentId" name="studentId" required pattern="[0-9]{6}" title="6-digit Student ID">
+                    <input type="text" id="newStudentId" name="studentId" required>
                 </div>
                 <div class="form-group">
                     <label for="newStudentName">Name:</label>
@@ -128,7 +131,10 @@
                 </div>
                 <div class="form-group">
                     <label for="newParentPhone">Parent Phone:</label>
-                    <input type="tel" id="newParentPhone" name="parentPhone" required pattern="05[0-9] [0-9]{3} [0-9]{4}" title="Phone number must be in UAE format: 05X XXX XXXX">
+                    <input type="tel" id="newParentPhone" name="parentPhone" required 
+                           pattern="05[0-9]\s[0-9]{3}\s[0-9]{4}" 
+                           placeholder="051 123 4567"
+                           title="Phone number must be in format: 051 123 4567">
                 </div>
                 <button type="submit">Add Student</button>
             </form>
@@ -157,5 +163,324 @@
     </div>
 
     <script src="script.js"></script>
+    <script>
+        // WebSocket connection
+        let ws;
+        let isConnected = false;
+
+        function connectWebSocket() {
+            ws = new WebSocket(`ws://${window.location.host}`);
+            
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                isConnected = true;
+                const statusSpan = document.querySelector('#rfidStatus span');
+                if (statusSpan) {
+                    statusSpan.textContent = 'Connected';
+                    statusSpan.className = 'status-connected';
+                }
+            };
+
+            ws.onclose = () => {
+                console.log('WebSocket disconnected');
+                isConnected = false;
+                const statusSpan = document.querySelector('#rfidStatus span');
+                if (statusSpan) {
+                    statusSpan.textContent = 'Disconnected';
+                    statusSpan.className = 'status-disconnected';
+                }
+                // Try to reconnect after 5 seconds
+                setTimeout(connectWebSocket, 5000);
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'scan') {
+                    // Update last scan display
+                    const lastScanSpan = document.querySelector('#lastScan span');
+                    if (lastScanSpan) {
+                        lastScanSpan.textContent = `${data.student.name} (${data.tagId})`;
+                        lastScanSpan.className = 'scan-received';
+                    }
+                    
+                    // Reload the attendance table
+                    loadTodayAttendance();
+                    
+                    // Update last scan time and student info
+                    const lastScanTime = document.getElementById('lastScanTime');
+                    const lastStudent = document.getElementById('lastStudent');
+                    if (lastScanTime && lastStudent) {
+                        lastScanTime.textContent = new Date(data.timestamp).toLocaleTimeString();
+                        lastStudent.textContent = `${data.student.name} (${data.status})`;
+                    }
+                }
+            };
+        }
+
+        // Connect WebSocket when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            connectWebSocket();
+            loadTodayAttendance();
+            
+            // Set up periodic refresh of attendance data
+            setInterval(loadTodayAttendance, 30000); // Refresh every 30 seconds
+            
+            // Add event listeners for buttons
+            document.getElementById('logoutBtn')?.addEventListener('click', () => {
+                fetch('/api/auth/logout', { method: 'POST' })
+                    .then(response => {
+                        if (response.ok) {
+                            window.location.href = '/login.html';
+                        }
+                    })
+                    .catch(error => console.error('Logout failed:', error));
+            });
+
+            document.getElementById('addStudentBtn')?.addEventListener('click', () => {
+                document.getElementById('addStudentModal').style.display = 'block';
+            });
+
+            document.getElementById('closeModal')?.addEventListener('click', () => {
+                document.getElementById('addStudentModal').style.display = 'none';
+            });
+
+            document.getElementById('addStudentForm')?.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                try {
+                    const response = await fetch('http://localhost:3000/api/students', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            student_id: formData.get('studentId'),
+                            name: formData.get('studentName'),
+                            grade: formData.get('studentGrade'),
+                            parent_phone: formData.get('parentPhone')
+                        })
+                    });
+                    
+                    if (response.ok) {
+                        document.getElementById('message').textContent = 'Student added successfully!';
+                        document.getElementById('addStudentForm').reset();
+                        setTimeout(() => {
+                            document.getElementById('addStudentModal').style.display = 'none';
+                            document.getElementById('message').textContent = '';
+                        }, 2000);
+                    } else {
+                        const error = await response.json();
+                        console.error('Server error:', error);
+                        document.getElementById('message').textContent = error.error || error.message || 'Failed to add student';
+                    }
+                } catch (error) {
+                    console.error('Error adding student:', error);
+                    document.getElementById('message').textContent = 'Error adding student';
+                }
+            });
+
+            document.getElementById('simulateScan')?.addEventListener('click', async () => {
+                const studentId = document.getElementById('simulatorStudentId').value;
+                if (studentId) {
+                    try {
+                        const response = await fetch('/api/attendance/scan', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ tagId: studentId })
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+
+                        const data = await response.json();
+                        console.log('Scan response:', data);
+
+                        // Update last scan display
+                        const lastScanTime = document.getElementById('lastScanTime');
+                        const lastStudent = document.getElementById('lastStudent');
+                        if (lastScanTime && lastStudent) {
+                            lastScanTime.textContent = new Date().toLocaleTimeString();
+                            lastStudent.textContent = `${data.student.name} (${data.status})`;
+                        }
+
+                        // Reload attendance table
+                        await loadTodayAttendance();
+
+                        // Show success message
+                        alert(data.message);
+
+                    } catch (error) {
+                        console.error('Error processing scan:', error);
+                        alert('Error processing scan: ' + error.message);
+                    }
+                }
+            });
+        });
+
+        async function loadTodayAttendance() {
+            try {
+                const response = await fetch('/api/attendance/today');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                
+                const tbody = document.getElementById('attendanceTableBody');
+                if (!tbody) {
+                    console.error('Attendance table body not found');
+                    return;
+                }
+
+                if (!Array.isArray(data)) {
+                    throw new Error('Invalid data format received from server');
+                }
+
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="no-records">No attendance records for today</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = data.map(record => {
+                    const status = record.status || (record.time_out ? 'Checked Out' : 'Checked In');
+                    return `
+                        <tr>
+                            <td>${record.student_id}</td>
+                            <td>${record.name}</td>
+                            <td>${record.grade}</td>
+                            <td>${new Date(record.time).toLocaleTimeString()}</td>
+                            <td>${record.time_out ? new Date(record.time_out).toLocaleTimeString() : '-'}</td>
+                            <td class="status-${status.toLowerCase().replace(/\s+/g, '-')}">${status}</td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('Error loading attendance:', error);
+                const tbody = document.getElementById('attendanceTableBody');
+                if (tbody) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="6" class="error">
+                                Error loading attendance data: ${error.message}
+                            </td>
+                        </tr>
+                    `;
+                }
+            }
+        }
+
+        // Set up WebSocket connection
+        function setupWebSocket() {
+            console.log('Setting up WebSocket connection...');
+            ws = new WebSocket('ws://localhost:3000');
+
+            ws.onopen = () => {
+                console.log('WebSocket connection established');
+                document.getElementById('rfidStatus').innerHTML = 'RFID Reader: <span class="status-connected">Connected</span>';
+            };
+
+            ws.onclose = () => {
+                console.log('WebSocket connection closed');
+                document.getElementById('rfidStatus').innerHTML = 'RFID Reader: <span class="status-disconnected">Disconnected</span>';
+                // Try to reconnect after 5 seconds
+                setTimeout(setupWebSocket, 5000);
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                document.getElementById('rfidStatus').innerHTML = 'RFID Reader: <span class="status-error">Error</span>';
+            };
+
+            ws.onmessage = (event) => {
+                console.log('WebSocket message received:', event.data);
+                const data = JSON.parse(event.data);
+                if (data.type === 'scan') {
+                    console.log('RFID Scan detected:', data);
+                    // Update last scan display
+                    const lastScanTime = document.getElementById('lastScanTime');
+                    const lastStudent = document.getElementById('lastStudent');
+                    if (lastScanTime && lastStudent) {
+                        lastScanTime.textContent = new Date(data.timestamp).toLocaleTimeString();
+                        lastStudent.textContent = `${data.student.name} (${data.status})`;
+                    }
+                    // Reload attendance table
+                    loadTodayAttendance();
+                }
+            };
+        }
+
+        // Set up RFID scanner
+        function setupRFIDScanner() {
+            console.log('Setting up RFID scanner...');
+            // Listen for RFID reader events
+            document.addEventListener('keypress', (event) => {
+                console.log('Key pressed:', event.key);
+                // Check if the key is from the RFID reader (usually sends data as keyboard input)
+                if (event.key.length === 1) {
+                    // Accumulate the RFID tag data
+                    rfidBuffer += event.key;
+                    console.log('RFID buffer:', rfidBuffer);
+                    
+                    // Check if we have received a complete tag (usually 8-10 characters)
+                    if (rfidBuffer.length >= 8) {
+                        console.log('Complete RFID tag received:', rfidBuffer);
+                        // Send the scan to the server
+                        fetch('/api/attendance/scan', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ tagId: rfidBuffer })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            console.log('Scan response:', data);
+                            // Update last scan information
+                            updateLastScan(data.student.name, new Date(), data.status);
+                            // Reload attendance data
+                            loadTodayAttendance();
+                        })
+                        .catch(error => {
+                            console.error('Error sending scan to server:', error);
+                        });
+                        
+                        // Clear the buffer for the next scan
+                        rfidBuffer = '';
+                    }
+                }
+            });
+        }
+    </script>
+
+    <style>
+        .rfid-status {
+            margin-bottom: 1rem;
+            padding: 0.5rem;
+            background-color: var(--card-bg);
+            border-radius: 4px;
+        }
+
+        .status-connected {
+            color: #2e7d32;
+            font-weight: 500;
+        }
+
+        .status-disconnected {
+            color: #c62828;
+            font-weight: 500;
+        }
+
+        .scan-received {
+            color: #1976d2;
+            font-weight: 500;
+        }
+
+        .no-scan {
+            color: #666;
+            font-style: italic;
+        }
+    </style>
 </body>
 </html>

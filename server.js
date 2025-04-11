@@ -6,6 +6,9 @@ const path = require('path');
 const bcrypt = require('bcrypt');
 const session = require('express-session');
 const jwt = require('jsonwebtoken');
+const http = require('http');
+const WebSocket = require('ws');
+const HardwareManager = require('./hardware/hardware-manager');
 
 // Load environment variables from .env file
 dotenv.config();
@@ -53,36 +56,79 @@ function checkDatabaseConnection() {
     });
 }
 
-// Initialize database tables
-async function initializeTables() {
-    try {
-        // Drop the parent_student table if it exists
-        await connection.promise().query('DROP TABLE IF EXISTS parent_student');
-        
-        // Create the parent_student table with correct structure
-        const createParentStudentTable = `
-            CREATE TABLE IF NOT EXISTS parent_student (
-                parent_id INT,
-                student_id VARCHAR(6),
-                relationship VARCHAR(50),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (parent_id, student_id),
-                FOREIGN KEY (parent_id) REFERENCES parents(id) ON DELETE CASCADE,
-                FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
-            )`;
-        
-        await connection.promise().query(createParentStudentTable);
-        console.log('Parent_student table recreated');
+// Initialize tables in correct order
+function initializeTables() {
+    // Create tables in correct order with proper column sizes
+    const createTablesSequence = [
+        `CREATE TABLE IF NOT EXISTS teachers (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            username VARCHAR(50) NOT NULL UNIQUE,
+            password VARCHAR(255) NOT NULL,
+            name VARCHAR(100) NOT NULL,
+            email VARCHAR(100) NOT NULL UNIQUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS parents (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            username VARCHAR(50) NOT NULL UNIQUE,
+            password VARCHAR(255) NOT NULL,
+            name VARCHAR(100) NOT NULL,
+            email VARCHAR(100) NOT NULL UNIQUE,
+            phone VARCHAR(20) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS students (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            student_id VARCHAR(50) NOT NULL UNIQUE,
+            name VARCHAR(100) NOT NULL,
+            grade VARCHAR(20),
+            parent_phone VARCHAR(20),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS attendance (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            student_id VARCHAR(50),
+            time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            time_out TIMESTAMP NULL,
+            status VARCHAR(20),
+            FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
+        )`,
+        `CREATE TABLE IF NOT EXISTS parent_student (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            parent_id INT,
+            student_id VARCHAR(50),
+            relationship VARCHAR(50),
+            FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
+        )`,
+        `CREATE TABLE IF NOT EXISTS notifications (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            student_id VARCHAR(50),
+            parent_id INT,
+            message TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE,
+            FOREIGN KEY (parent_id) REFERENCES parents(id) ON DELETE CASCADE
+        )`
+    ];
 
-        // Create the relationship
-        await connection.promise().query(
-            'INSERT INTO parent_student (parent_id, student_id, relationship) VALUES (?, ?, ?)',
-            [1, '444444', 'Guardian']
-        );
-        console.log('Parent-student relationship created');
-    } catch (error) {
-        console.error('Error initializing tables:', error);
+    // Execute creates sequentially
+    let currentCreateIndex = 0;
+    function executeNextCreate() {
+        if (currentCreateIndex < createTablesSequence.length) {
+            connection.query(createTablesSequence[currentCreateIndex], (err) => {
+                if (err) {
+                    console.error(`Error creating table ${currentCreateIndex + 1}:`, err);
+                } else {
+                    console.log(`Table ${currentCreateIndex + 1} created successfully`);
+                }
+                currentCreateIndex++;
+                executeNextCreate();
+            });
+        }
     }
+
+    // Start the sequence
+    executeNextCreate();
 }
 
 // Connect to MySQL
@@ -97,115 +143,8 @@ connection.connect((err) => {
     }
     console.log('Connected to MySQL database');
     
-    // Create tables if they don't exist
-    const createTeachersTable = `
-        CREATE TABLE IF NOT EXISTS teachers (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            username VARCHAR(50) UNIQUE NOT NULL,
-            password VARCHAR(255) NOT NULL,
-            name VARCHAR(100) NOT NULL,
-            email VARCHAR(100) UNIQUE NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )`;
-    
-    const createStudentsTable = `
-        CREATE TABLE IF NOT EXISTS students (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            student_id VARCHAR(6) NOT NULL UNIQUE,
-            name VARCHAR(100) NOT NULL,
-            grade VARCHAR(20) NOT NULL,
-            parent_phone VARCHAR(20),
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )`;
-    
-    const createAttendanceTable = `
-        CREATE TABLE IF NOT EXISTS attendance (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            student_id VARCHAR(6) NOT NULL,
-            time DATETIME NOT NULL,
-            time_out DATETIME,
-            status VARCHAR(50) NOT NULL,
-            FOREIGN KEY (student_id) REFERENCES students(student_id)
-        )`;
-    
-    const createParentsTable = `
-        CREATE TABLE IF NOT EXISTS parents (
-            id INT PRIMARY KEY AUTO_INCREMENT,
-            username VARCHAR(50) UNIQUE NOT NULL,
-            password VARCHAR(255) NOT NULL,
-            name VARCHAR(100) NOT NULL,
-            email VARCHAR(100) UNIQUE NOT NULL,
-            phone VARCHAR(20),
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )`;
-    
-    const createNotificationsTable = `
-        CREATE TABLE IF NOT EXISTS notifications (
-            id INT PRIMARY KEY AUTO_INCREMENT,
-            parent_id INT,
-            student_id INT,
-            type VARCHAR(50) NOT NULL,
-            message TEXT NOT NULL,
-            is_read BOOLEAN DEFAULT false,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (parent_id) REFERENCES parents(id) ON DELETE CASCADE,
-            FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
-        )`;
-    
-    connection.query(createTeachersTable, (err) => {
-        if (err) {
-            console.error('Error creating teachers table:', err);
-        } else {
-            console.log('Teachers table created or already exists');
-        }
-    });
-    
-    connection.query(createStudentsTable, (err) => {
-        if (err) {
-            console.error('Error creating students table:', err);
-        } else {
-            console.log('Students table created or already exists');
-            
-            // Create test student if not exists
-            connection.query(`
-                INSERT IGNORE INTO students (student_id, name, grade, parent_phone) 
-                VALUES ('444444', 'T45', '4A', '050 000 0000')
-            `, (err) => {
-                if (err) {
-                    console.error('Error creating test student:', err);
-                } else {
-                    console.log('Test student created or already exists');
-                }
-            });
-        }
-    });
-    
-    connection.query(createAttendanceTable, (err) => {
-        if (err) {
-            console.error('Error creating attendance table:', err);
-        } else {
-            console.log('Attendance table created or already exists');
-        }
-    });
-    
-    connection.query(createParentsTable, (err) => {
-        if (err) {
-            console.error('Error creating parents table:', err);
-        } else {
-            console.log('Parents table created or already exists');
-        }
-    });
-    
     // Call the initialization function
     initializeTables();
-    
-    connection.query(createNotificationsTable, (err) => {
-        if (err) {
-            console.error('Error creating notifications table:', err);
-        } else {
-            console.log('Notifications table created or already exists');
-        }
-    });
 });
 
 // Add middleware to check database connection before each request
@@ -247,6 +186,122 @@ app.get('/api/students/:id', (req, res) => {
         res.json(results[0]);
     });
 });
+
+// Create HTTP server
+const server = http.createServer(app);
+
+// Create WebSocket server
+const wss = new WebSocket.Server({ server });
+
+// Store connected WebSocket clients
+const clients = new Set();
+
+// Function to broadcast messages to all connected clients
+function broadcast(message) {
+    const messageString = JSON.stringify(message);
+    clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(messageString);
+        }
+    });
+}
+
+// WebSocket connection handling
+wss.on('connection', (ws) => {
+    console.log('New WebSocket client connected');
+    clients.add(ws);
+
+    ws.on('message', (message) => {
+        try {
+            const data = JSON.parse(message);
+            console.log('WebSocket message received:', data);
+            
+            if (data.type === 'scan') {
+                console.log('Processing RFID scan:', data.tagId);
+                processRFIDScan(data.tagId);
+            }
+        } catch (error) {
+            console.error('Error processing WebSocket message:', error);
+        }
+    });
+
+    ws.on('close', () => {
+        console.log('WebSocket client disconnected');
+        clients.delete(ws);
+    });
+});
+
+async function processRFIDScan(tagId) {
+    try {
+        console.log('Processing RFID scan for tag:', tagId);
+        
+        // Find student by student ID (which is the RFID tag)
+        const [students] = await connection.promise().query(
+            'SELECT * FROM students WHERE student_id = ?',
+            [tagId]
+        );
+        
+        // If student not found, ignore the scan
+        if (students.length === 0) {
+            console.log('Student not found in database, ignoring scan');
+            return;
+        }
+
+        const student = students[0];
+        console.log('Found registered student:', student);
+
+        // Get the most recent attendance record for today
+        const [attendance] = await connection.promise().query(
+            'SELECT * FROM attendance WHERE student_id = ? AND DATE(time) = CURDATE() ORDER BY time DESC LIMIT 1',
+            [student.student_id]
+        );
+
+        let response;
+        if (attendance.length === 0 || attendance[0].time_out !== null) {
+            // Create new attendance record (check-in)
+            const [result] = await connection.promise().query(
+                'INSERT INTO attendance (student_id, time) VALUES (?, NOW())',
+                [student.student_id]
+            );
+            console.log('Created new attendance record:', result);
+            response = {
+                type: 'scan',
+                student: {
+                    id: student.id,
+                    student_id: student.student_id,
+                    name: student.name,
+                    grade: student.grade
+                },
+                status: 'checked_in',
+                timestamp: new Date().toISOString()
+            };
+        } else {
+            // Update existing attendance record with check-out time
+            await connection.promise().query(
+                'UPDATE attendance SET time_out = NOW() WHERE id = ?',
+                [attendance[0].id]
+            );
+            response = {
+                type: 'scan',
+                student: {
+                    id: student.id,
+                    student_id: student.student_id,
+                    name: student.name,
+                    grade: student.grade
+                },
+                status: 'checked_out',
+                timestamp: new Date().toISOString()
+            };
+        }
+
+        // Broadcast the response to all connected clients
+        broadcast(response);
+        return response;
+    } catch (error) {
+        console.error('Error processing RFID scan:', error);
+        throw error;
+    }
+}
 
 // Record attendance
 app.post('/api/attendance', (req, res) => {
@@ -376,6 +431,7 @@ app.post('/api/attendance', (req, res) => {
 
 // Get today's attendance
 app.get('/api/attendance/today', (req, res) => {
+    console.log('Fetching today\'s attendance...');
     connection.query(
         `SELECT a.*, s.name, s.grade, s.parent_phone 
          FROM attendance a 
@@ -384,9 +440,19 @@ app.get('/api/attendance/today', (req, res) => {
          ORDER BY a.time DESC`,
         (err, results) => {
             if (err) {
-                res.status(500).json({ message: err.message });
+                console.error('Database error in attendance/today:', err);
+                console.error('Error code:', err.code);
+                console.error('Error message:', err.message);
+                console.error('Error SQL state:', err.sqlState);
+                res.status(500).json({ 
+                    error: 'Database error',
+                    message: err.message,
+                    code: err.code,
+                    sqlState: err.sqlState
+                });
                 return;
             }
+            console.log('Successfully fetched attendance records:', results.length);
             // Process the results to ensure correct status
             const processedResults = results.map(record => ({
                 ...record,
@@ -450,104 +516,53 @@ app.get('/api/attendance/range', (req, res) => {
 });
 
 // Add new student
-app.post('/api/students', async (req, res) => {
-    console.log('Received request body:', req.body);
-    console.log('Request headers:', req.headers);
-    console.log('Content-Type:', req.headers['content-type']);
+app.post('/api/students', (req, res) => {
+    const { student_id, name, grade, parent_phone } = req.body;
     
-    // Check if the request body is empty
-    if (!req.body || Object.keys(req.body).length === 0) {
-        console.error('Empty request body received');
-        return res.status(400).json({ 
-            error: 'Empty request body',
-            details: 'No data was received in the request'
-        });
-    }
-    
-    // Extract and validate the data
-    const studentData = {
-        student_id: req.body.student_id?.toString().trim(),
-        name: req.body.name?.trim(),
-        grade: req.body.grade?.trim(),
-        parent_phone: req.body.parent_phone?.trim()
-    };
-
-    console.log('Processed student data:', studentData);
-
-    // Validate all required fields
-    if (!studentData.student_id || !studentData.name || !studentData.grade || !studentData.parent_phone) {
-        console.log('Missing required fields:', studentData);
-        return res.status(400).json({ 
-            error: 'All fields are required',
-            details: {
-                student_id: !studentData.student_id ? 'Student ID is required' : null,
-                name: !studentData.name ? 'Name is required' : null,
-                grade: !studentData.grade ? 'Grade is required' : null,
-                parent_phone: !studentData.parent_phone ? 'Parent phone is required' : null
-            }
-        });
-    }
-
-    // Validate student ID format
-    if (!/^\d{6}$/.test(studentData.student_id)) {
-        return res.status(400).json({ 
-            error: 'Invalid student ID format',
-            details: 'Student ID must be 6 digits'
-        });
-    }
-
-    // Validate phone number format
-    const phoneRegex = /^05[0-9][\s-]?[0-9]{3}[\s-]?[0-9]{4}$/;
-    if (!phoneRegex.test(studentData.parent_phone)) {
-        return res.status(400).json({ 
-            error: 'Invalid phone number format',
-            details: 'Phone number must start with 05X followed by 7 digits. Spaces between groups are optional (e.g. 050 123 4567 or 0501234567)'
-        });
-    }
-
-    // Format the phone number to ensure consistent storage
-    studentData.parent_phone = studentData.parent_phone.replace(/[\s-]/g, ' ').replace(/(\d{3})(\d{3})(\d{4})/, '$1 $2 $3');
-
-    try {
-        console.log('Attempting to insert student into database with data:', studentData);
-        const query = 'INSERT INTO students (student_id, name, grade, parent_phone) VALUES (?, ?, ?, ?)';
-        const values = [
-            studentData.student_id,
-            studentData.name,
-            studentData.grade,
-            studentData.parent_phone
-        ];
-        console.log('Executing query with values:', values);
+    // First check if student exists
+    connection.query('SELECT * FROM students WHERE student_id = ?', [student_id], (err, results) => {
+        if (err) {
+            console.error('Error checking student:', err);
+            res.status(500).json({ error: 'Database error', details: err.message });
+            return;
+        }
         
-        connection.query(query, values, (error, results) => {
-            if (error) {
-                console.error('Database error:', error);
-                if (error.code === 'ER_DUP_ENTRY') {
-                    return res.status(400).json({ 
-                        error: 'Student ID already exists',
-                        details: `Student ID ${studentData.student_id} is already registered`
-                    });
-                } else {
-                    return res.status(500).json({ 
-                        error: 'Database error',
-                        details: error.message
+        if (results.length > 0) {
+            // Student exists, update the record
+            connection.query(
+                'UPDATE students SET name = ?, grade = ?, parent_phone = ? WHERE student_id = ?',
+                [name, grade, parent_phone, student_id],
+                (err, result) => {
+                    if (err) {
+                        console.error('Error updating student:', err);
+                        res.status(500).json({ error: 'Database error', details: err.message });
+                        return;
+                    }
+                    res.status(200).json({ 
+                        message: 'Student updated successfully',
+                        student: { student_id, name, grade, parent_phone }
                     });
                 }
-            }
-            
-            console.log('Student inserted successfully:', results);
-            return res.status(201).json({ 
-                message: 'Student added successfully',
-                student: studentData
-            });
-        });
-    } catch (error) {
-        console.error('Error in add student endpoint:', error);
-        return res.status(500).json({ 
-            error: 'Internal server error',
-            details: error.message
-        });
-    }
+            );
+        } else {
+            // Student doesn't exist, create new record
+            connection.query(
+                'INSERT INTO students (student_id, name, grade, parent_phone) VALUES (?, ?, ?, ?)',
+                [student_id, name, grade, parent_phone],
+                (err, result) => {
+                    if (err) {
+                        console.error('Error adding student:', err);
+                        res.status(500).json({ error: 'Database error', details: err.message });
+                        return;
+                    }
+                    res.status(201).json({ 
+                        message: 'Student added successfully',
+                        student: { student_id, name, grade, parent_phone }
+                    });
+                }
+            );
+        }
+    });
 });
 
 app.post('/api/login', async (req, res) => {
@@ -579,11 +594,13 @@ app.post('/api/teachers/register', async (req, res) => {
     }
 
     try {
+        console.log('Starting teacher registration process...');
         // Check if username already exists
         const [existingTeachers] = await connection.promise().query(
             'SELECT * FROM teachers WHERE username = ? OR email = ?',
             [username, email]
         );
+        console.log('Existing teachers check complete:', existingTeachers);
 
         if (existingTeachers.length > 0) {
             const isDuplicateUsername = existingTeachers.some(t => t.username === username);
@@ -601,18 +618,28 @@ app.post('/api/teachers/register', async (req, res) => {
         }
 
         // Hash password
+        console.log('Hashing password...');
         const hashedPassword = await bcrypt.hash(password, 10);
+        console.log('Password hashed successfully');
 
         // Insert new teacher
-        await connection.promise().query(
+        console.log('Inserting new teacher into database...');
+        const [result] = await connection.promise().query(
             'INSERT INTO teachers (username, password, name, email) VALUES (?, ?, ?, ?)',
             [username, hashedPassword, name, email]
         );
+        console.log('Teacher inserted successfully:', result);
 
         console.log('Teacher registered successfully:', { username, name, email });
         res.status(201).json({ message: 'Teacher registered successfully' });
     } catch (error) {
         console.error('Registration error:', error);
+        console.error('Error details:', {
+            message: error.message,
+            code: error.code,
+            sqlState: error.sqlState,
+            sqlMessage: error.sqlMessage
+        });
         res.status(500).json({ error: 'An error occurred during registration. Please try again.' });
     }
 });
@@ -811,6 +838,7 @@ app.post('/api/parents/register', async (req, res) => {
             res.status(201).json({ message: 'Parent registered successfully' });
         } catch (error) {
             await conn.rollback();
+            console.error('Transaction error:', error);
             throw error;
         }
     } catch (error) {
@@ -837,65 +865,69 @@ app.get('/api/parents/:parentId/students', async (req, res) => {
     }
 });
 
-// Get parent's student attendance for today
+// Get parent's child attendance for today
 app.get('/api/parents/:parentId/attendance/today', async (req, res) => {
+    const parentId = req.params.parentId;
+    
     try {
-        console.log('Fetching attendance for parent:', req.params.parentId);
-        
-        // First check the parent-student relationship
-        const [relationships] = await connection.promise().query(
+        // First get the student ID associated with this parent
+        const [parentStudent] = await connection.promise().query(
             'SELECT student_id FROM parent_student WHERE parent_id = ?',
-            [req.params.parentId]
-        );
-        console.log('Parent-student relationships:', relationships);
-
-        if (relationships.length === 0) {
-            console.log('No students found for parent');
-            return res.json([]);
-        }
-
-        // Get attendance records
-        const [attendance] = await connection.promise().query(
-            `SELECT a.*, s.name, s.grade 
-             FROM attendance a
-             JOIN students s ON a.student_id = s.student_id
-             WHERE a.student_id IN (
-                SELECT student_id 
-                FROM parent_student 
-                WHERE parent_id = ?
-             )
-             AND DATE(a.time) = CURDATE()
-             ORDER BY a.time DESC`,
-            [req.params.parentId]
+            [parentId]
         );
         
-        console.log('Found attendance records:', attendance);
-
-        // Process the results to ensure correct status
-        const processedAttendance = attendance.map(record => ({
+        if (parentStudent.length === 0) {
+            return res.status(404).json({ error: 'No student found for this parent' });
+        }
+        
+        const studentId = parentStudent[0].student_id;
+        
+        // Get today's attendance records for this student
+        const today = new Date().toISOString().split('T')[0];
+        const [attendance] = await connection.promise().query(`
+            SELECT a.*, s.name as student_name 
+            FROM attendance a
+            JOIN students s ON a.student_id = s.student_id
+            WHERE a.student_id = ? 
+            AND DATE(a.time) = ?
+            ORDER BY a.time DESC
+        `, [studentId, today]);
+        
+        // Process the records to determine status
+        const processedRecords = attendance.map(record => ({
             ...record,
-            status: record.time_out ? 'Checked Out' : 'Checked In',
-            time: new Date(record.time).toISOString(),
-            time_out: record.time_out ? new Date(record.time_out).toISOString() : null
+            status: record.time_out ? 'Checked Out' : 'Checked In'
         }));
         
-        console.log('Processed attendance records:', processedAttendance);
-        res.json(processedAttendance);
+        res.json(processedRecords);
     } catch (error) {
         console.error('Error fetching attendance:', error);
-        res.status(500).json({ error: 'Failed to fetch attendance records' });
+        res.status(500).json({ error: 'An error occurred while fetching attendance' });
     }
 });
 
 // Get parent's notifications
 app.get('/api/parents/:parentId/notifications', async (req, res) => {
     try {
+        // First get the student ID associated with this parent
+        const [parentStudent] = await connection.promise().query(
+            'SELECT student_id FROM parent_student WHERE parent_id = ?',
+            [req.params.parentId]
+        );
+        
+        if (parentStudent.length === 0) {
+            return res.status(404).json({ error: 'No student found for this parent' });
+        }
+        
+        const studentId = parentStudent[0].student_id;
+        
+        // Get notifications for this student
         const [notifications] = await connection.promise().query(
             `SELECT * FROM notifications 
-             WHERE parent_id = ?
+             WHERE student_id = ?
              ORDER BY created_at DESC
              LIMIT 10`,
-            [req.params.parentId]
+            [studentId]
         );
         
         res.json(notifications);
@@ -1001,8 +1033,201 @@ app.use((req, res) => {
     res.status(404).json({ error: 'Not found' });
 });
 
+// Initialize hardware manager
+const hardwareManager = new HardwareManager();
+
+// Function to check if Arduino is connected
+async function checkArduinoConnection() {
+    try {
+        // Try to initialize the hardware manager
+        await hardwareManager.initialize();
+        console.log('Arduino connected successfully');
+        return true;
+    } catch (error) {
+        console.log('Arduino not found. Please connect the Arduino and restart the server.');
+        return false;
+    }
+}
+
+// Initialize hardware with proper error handling
+async function initializeHardware() {
+    try {
+        const isArduinoConnected = await checkArduinoConnection();
+        if (!isArduinoConnected) {
+            console.log('Waiting for Arduino connection...');
+            // Try to reconnect every 5 seconds
+            setTimeout(initializeHardware, 5000);
+            return;
+        }
+
+        // Set up RFID tag read handler
+        hardwareManager.setOnTagRead(async (tagId) => {
+            try {
+                console.log('RFID tag read:', tagId);
+                // Process the scan using the existing scan endpoint logic
+                const response = await processRFIDScan(tagId);
+                broadcast(response);
+            } catch (error) {
+                console.error('Error processing RFID scan:', error);
+            }
+        });
+
+    } catch (error) {
+        console.error('Error initializing hardware:', error);
+        // Try to reconnect after 5 seconds
+        setTimeout(initializeHardware, 5000);
+    }
+}
+
+// Start hardware initialization
+initializeHardware();
+
+// Record attendance
+app.post('/api/attendance/scan', async (req, res) => {
+    try {
+        const { tagId } = req.body;
+        console.log('Received scan request for tag:', tagId);
+
+        if (!tagId) {
+            console.error('No tag ID provided');
+            return res.status(400).json({ error: 'Tag ID is required' });
+        }
+
+        // Use the tag ID directly as the student ID
+        const studentId = tagId.replace(/\s+/g, '');
+        console.log('Looking up student with ID:', studentId);
+
+        // Find student by student ID
+        const [students] = await connection.promise().query(
+            'SELECT * FROM students WHERE student_id = ?',
+            [studentId]
+        );
+
+        if (students.length === 0) {
+            console.log('Student not found, creating new student record');
+            // If student doesn't exist, create a new student record
+            const [result] = await connection.promise().query(
+                'INSERT INTO students (student_id, name, grade) VALUES (?, ?, ?)',
+                [studentId, `Student ${studentId}`, 'Unknown']
+            );
+
+            const newStudent = {
+                id: result.insertId,
+                student_id: studentId,
+                name: `Student ${studentId}`,
+                grade: 'Unknown'
+            };
+
+            // Create attendance record for new student
+            const [attendanceResult] = await connection.promise().query(
+                'INSERT INTO attendance (student_id, time) VALUES (?, NOW())',
+                [studentId]
+            );
+
+            console.log('Created new attendance record:', attendanceResult);
+
+            const response = {
+                success: true,
+                student: {
+                    id: newStudent.id,
+                    name: newStudent.name,
+                    grade: newStudent.grade
+                },
+                status: 'Checked In',
+                message: `${newStudent.name} has checked in`,
+                timestamp: new Date().toISOString()
+            };
+
+            // Broadcast the scan event
+            broadcast({
+                type: 'scan',
+                ...response
+            });
+
+            return res.json(response);
+        }
+
+        const student = students[0];
+        console.log('Found existing student:', student);
+
+        // Check if student has already checked in today
+        const [existingRecords] = await connection.promise().query(
+            'SELECT * FROM attendance WHERE student_id = ? AND DATE(time) = CURDATE()',
+            [studentId]
+        );
+
+        console.log('Existing attendance records:', existingRecords);
+
+        let status;
+        let message;
+        let attendanceId;
+
+        if (existingRecords.length === 0) {
+            // First check-in of the day
+            console.log('No existing records, creating new check-in');
+            const [result] = await connection.promise().query(
+                'INSERT INTO attendance (student_id, time) VALUES (?, NOW())',
+                [studentId]
+            );
+            attendanceId = result.insertId;
+            status = 'Checked In';
+            message = `${student.name} has checked in`;
+        } else {
+            const record = existingRecords[0];
+            if (!record.time_out) {
+                // Check out
+                console.log('Updating existing record with check-out time');
+                await connection.promise().query(
+                    'UPDATE attendance SET time_out = NOW() WHERE id = ?',
+                    [record.id]
+                );
+                attendanceId = record.id;
+                status = 'Checked Out';
+                message = `${student.name} has checked out`;
+            } else {
+                // Already checked out
+                console.log('Student already checked out, creating new check-in');
+                const [result] = await connection.promise().query(
+                    'INSERT INTO attendance (student_id, time) VALUES (?, NOW())',
+                    [studentId]
+                );
+                attendanceId = result.insertId;
+                status = 'Checked In';
+                message = `${student.name} has checked in`;
+            }
+        }
+
+        console.log('Final status:', status);
+
+        const response = {
+            success: true,
+            student: {
+                id: student.id,
+                name: student.name,
+                grade: student.grade
+            },
+            status,
+            message,
+            timestamp: new Date().toISOString()
+        };
+
+        // Broadcast the scan event
+        broadcast({
+            type: 'scan',
+            ...response
+        });
+
+        res.json(response);
+
+    } catch (error) {
+        console.error('Error processing RFID scan:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Start the server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
-    console.log(`Open http://localhost:${PORT} in your browser`);
+    console.log(`Open http://localhost:${PORT} in your browser.`);
 });

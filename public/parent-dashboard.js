@@ -57,35 +57,46 @@ async function loadTodayAttendance() {
                 'Authorization': `Bearer ${localStorage.getItem('parentToken')}`
             }
         });
-        
-        if (response.ok) {
-            const data = await response.json();
-            const tableBody = document.getElementById('attendanceTableBody');
-            
-            if (data.length > 0) {
-                tableBody.innerHTML = data.map(record => `
-                    <tr>
-                        <td>${new Date(record.time).toLocaleTimeString()}</td>
-                        <td>
-                            <span class="status-badge ${record.status === 'Checked In' ? 'status-in' : 'status-out'}">
-                                ${record.status}
-                            </span>
-                        </td>
-                        <td>${record.time_out ? 
-                            `Left at ${new Date(record.time_out).toLocaleTimeString()}` : 
-                            (record.status === 'Checked In' ? 'Currently at school' : 'Not at school')}</td>
-                    </tr>
-                `).join('');
-            } else {
-                tableBody.innerHTML = '<tr><td colspan="3">No attendance records for today.</td></tr>';
-            }
-        } else {
-            throw new Error('Failed to load attendance');
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch attendance data');
         }
+
+        const data = await response.json();
+        const tableBody = document.getElementById('attendanceTableBody');
+        
+        if (data.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="3">No attendance records for today</td></tr>';
+            return;
+        }
+
+        tableBody.innerHTML = data.map(record => {
+            const time = new Date(record.time);
+            const formattedTime = time.toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+            
+            const statusClass = `status-${record.status.toLowerCase().replace(' ', '-')}`;
+            
+            return `
+                <tr>
+                    <td>${formattedTime}</td>
+                    <td>
+                        <span class="${statusClass}">${record.status}</span>
+                    </td>
+                    <td>${record.details || '-'}</td>
+                </tr>
+            `;
+        }).join('');
     } catch (error) {
         console.error('Error loading attendance:', error);
-        document.getElementById('attendanceTableBody').innerHTML = 
-            '<tr><td colspan="3" class="error-message">Error loading attendance records. Please try again later.</td></tr>';
+        document.getElementById('attendanceTableBody').innerHTML = `
+            <tr>
+                <td colspan="3">Error loading attendance records</td>
+            </tr>
+        `;
     }
 }
 

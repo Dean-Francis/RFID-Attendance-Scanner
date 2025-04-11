@@ -7,12 +7,15 @@
     "start": "node server.js"
   },
   "dependencies": {
+    "@serialport/parser-readline": "^10.5.0",
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "express-session": "^1.17.3",
     "jsonwebtoken": "^9.0.2",
-    "mysql2": "^3.6.5"
+    "mysql2": "^3.6.5",
+    "serialport": "^10.5.0",
+    "ws": "^8.18.1"
   }
 }

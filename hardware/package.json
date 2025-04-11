@@ -1,0 +1,14 @@
+{
+  "name": "rfid-attendance-hardware",
+  "version": "1.0.0",
+  "description": "Hardware interface for RFID Attendance System",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "serialport": "^10.5.0",
+    "@serialport/parser-readline": "^10.5.0"
+  }
+} 
