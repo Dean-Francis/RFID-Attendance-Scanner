@@ -4,55 +4,121 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Parent Dashboard - RFID Attendance System</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="parent-dashboard.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+
+        .latest-scan-section {
+            background-color: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .scan-card {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-top: 10px;
+        }
+
+        #latestScanInfo {
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        #latestScanInfo p {
+            margin: 12px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #latestScanInfo p span {
+            font-weight: 500;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+            text-align: center;
+            min-width: 100px;
+        }
+
+        .status-in {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        .status-out {
+            background-color: #f44336;
+            color: white;
+        }
+
+        h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+
+        .welcome-section {
+            margin-bottom: 30px;
+        }
+
+        .welcome-section h2 {
+            color: #2196F3;
+        }
+    </style>
 </head>
 <body>
     <div class="header">
         <h1>RFID Attendance System</h1>
         <div class="user-info">
-            <span id="parentName">Parent</span>
+            <span id="headerParentName">Parent</span>
             <button id="logoutButton" class="button">Logout</button>
         </div>
     </div>
 
     <div class="dashboard-container">
         <div class="welcome-section">
-            <h2>Welcome, <span id="parentName">Parent</span></h2>
+            <h2>Welcome, <span id="welcomeParentName">Parent</span></h2>
+        </div>
+
+        <div class="latest-scan-section">
+            <h3>Latest Scan</h3>
+            <div class="scan-card">
+                <div id="latestScanInfo">
+                    <p><strong>Student:</strong> <span id="latestStudent">-</span></p>
+                    <p><strong>Status:</strong> <span id="latestStatus" class="status">-</span></p>
+                    <p><strong>Time:</strong> <span id="latestTime">-</span></p>
+                </div>
+            </div>
         </div>
 
         <div class="student-info">
             <h3>Student Information</h3>
-            <div id="studentDetails">Loading...</div>
-        </div>
-
-        <div class="attendance-section">
-            <h3>Today's Attendance</h3>
-            <table class="attendance-table">
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Status</th>
-                        <th>Details</th>
-                    </tr>
-                </thead>
-                <tbody id="attendanceTableBody">
-                    <tr>
-                        <td colspan="3">Loading attendance records...</td>
-                    </tr>
-                </tbody>
-            </table>
+            <div id="studentDetails" class="info-card">Loading...</div>
         </div>
 
         <div class="notifications-section">
             <h3>Notifications</h3>
-            <div id="notificationsList">Loading...</div>
+            <div id="notificationsList" class="info-card">Loading...</div>
         </div>
     </div>
 
     <div class="footer">
         <p>© 2024 RFID Attendance System. All rights reserved.</p>
     </div>
+    
     <script src="parent-dashboard.js"></script>
 </body>
 </html> 

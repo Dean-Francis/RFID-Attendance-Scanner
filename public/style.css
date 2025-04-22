@@ -70,8 +70,7 @@ section {
 }
 
 .attendance-section {
-    grid-column: 2;
-    grid-row: span 2;
+    margin: 20px 0;
     padding: 20px;
     background: white;
     border-radius: 8px;
@@ -113,10 +112,6 @@ th, td {
 th {
     background-color: var(--primary-color);
     color: white;
-}
-
-tr:hover {
-    background-color: #f5f5f5;
 }
 
 button {
@@ -239,7 +234,6 @@ button:hover {
     }
 }
 
-/* Modal Styles */
 .modal {
     display: none;
     position: fixed;
@@ -522,24 +516,6 @@ nav a.active {
     color: white;
 }
 
-/* Responsive Design */
-@media (max-width: 768px) {
-    .report-filters {
-        flex-direction: column;
-    }
-
-    .date-range,
-    .filter-options,
-    .export-buttons {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .summary-stats {
-        grid-template-columns: 1fr;
-    }
-}
-
 /* Status Colors */
 .status-checked-in, .status-checked-out {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -559,38 +535,104 @@ nav a.active {
 .attendance-table {
     width: 100%;
     border-collapse: collapse;
-    margin-top: 1rem;
+    margin-top: 15px;
+    table-layout: fixed;
 }
 
+.attendance-table th,
 .attendance-table td {
     padding: 12px;
     text-align: left;
     border-bottom: 1px solid #e0e0e0;
     vertical-align: middle;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    font-size: 1rem;
+    word-wrap: break-word;
 }
 
+.attendance-table th {
+    background-color: #f5f5f5;
+    font-weight: 600;
+    color: #424242;
+    position: sticky;
+    top: 0;
+}
+
+.attendance-table td:first-child {
+    width: 20%;
+}
+
+.attendance-table td:nth-child(2) {
+    width: 30%;
+}
+
+.attendance-table td:last-child {
+    width: 50%;
+}
+
+/* Status Indicators in Table */
+.status-checked-in,
+.status-checked-out {
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-align: center;
+    min-width: 100px;
+}
+
+.status-checked-in {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+    border: 1px solid #c8e6c9;
+}
+
+.status-checked-out {
+    background-color: #ffebee;
+    color: #c62828;
+    border: 1px solid #ffcdd2;
+}
+
+/* Center align the status column */
 .attendance-table td:last-child {
     text-align: center;
 }
 
-/* Status cell styles */
-.attendance-table td.status-checked-in,
-.attendance-table td.status-checked-out {
-    text-align: center;
-    padding: 12px;
+.rfid-status {
+    margin-bottom: 1rem;
+    padding: 0.5rem;
+    background-color: #f5f5f5;
+    border-radius: 4px;
+}
+
+.rfid-status div {
+    margin: 0.25rem 0;
+    font-size: 0.9rem;
+}
+
+.rfid-status span {
     font-weight: 600;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    font-size: 1rem;
 }
 
-.attendance-table td.status-checked-in {
-    color: #2e7d32;
+.scan-update {
+    animation: highlight 1s ease-in-out;
 }
 
-.attendance-table td.status-checked-out {
-    color: #c62828;
+@keyframes highlight {
+    0% {
+        background-color: #e8f5e9;
+    }
+    100% {
+        background-color: transparent;
+    }
+}
+
+.rfid-status #lastScanTime {
+    color: #666;
+}
+
+.rfid-status #lastStudent {
+    font-weight: 600;
+    color: #1a237e;
 }
 
 .portal-links {
@@ -784,6 +826,7 @@ nav a.active {
     padding: 1.5rem;
     border-radius: 8px;
     border: 1px solid #e0e0e0;
+    overflow-x: auto;
 }
 
 .attendance-section h3 {
@@ -797,44 +840,80 @@ nav a.active {
     width: 100%;
     border-collapse: collapse;
     margin-top: 1rem;
+    table-layout: fixed;
 }
 
+.attendance-table th,
 .attendance-table td {
     padding: 12px;
     text-align: left;
     border-bottom: 1px solid #e0e0e0;
     vertical-align: middle;
+    word-wrap: break-word;
 }
 
 .attendance-table th {
-    padding: 12px;
-    text-align: left;
     background-color: #f5f5f5;
-    border-bottom: 2px solid #e0e0e0;
     font-weight: 600;
     color: #424242;
+    position: sticky;
+    top: 0;
 }
 
-.attendance-table tr:hover {
-    background-color: #fafafa;
+.attendance-table td:first-child {
+    width: 20%;
 }
 
-.status-badge {
-    padding: 0.5rem 1rem;
-    border-radius: 20px;
+.attendance-table td:nth-child(2) {
+    width: 30%;
+}
+
+.attendance-table td:last-child {
+    width: 50%;
+}
+
+.status-checked-in,
+.status-checked-out {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
     font-weight: 600;
     font-size: 0.9rem;
-    display: inline-block;
 }
 
-.status-in {
+.status-checked-in {
     background-color: #e8f5e9;
     color: #2e7d32;
 }
 
-.status-out {
+.status-checked-out {
     background-color: #fbe9e7;
     color: #d84315;
+}
+
+.rfid-status {
+    margin-bottom: 1rem;
+    padding: 0.5rem;
+    background-color: #f5f5f5;
+    border-radius: 4px;
+}
+
+.rfid-status div {
+    margin: 0.25rem 0;
+    font-size: 0.9rem;
+}
+
+.rfid-status span {
+    font-weight: 600;
+}
+
+.rfid-status #lastScanTime {
+    color: #666;
+}
+
+.rfid-status #lastStudent {
+    font-weight: 600;
+    color: #1a237e;
 }
 
 .notifications-section {
@@ -919,78 +998,4 @@ nav a.active {
     padding: 1rem;
     font-size: 0.8rem;
     margin-top: 2rem;
-}
-
-/* General Styles */
-body {
-    font-family: Arial, sans-serif;
-    margin: 0;
-    padding: 20px;
-    background-color: #f0f2f5;
-}
-
-.dashboard-container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 20px;
-    background-color: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-/* Header Styles */
-.header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-    padding-bottom: 20px;
-    border-bottom: 1px solid #ddd;
-}
-
-.user-info {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-/* Button Styles */
-.button {
-    padding: 8px 16px;
-    background-color: #007bff;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-}
-
-.button:hover {
-    background-color: #0056b3;
-}
-
-/* Section Styles */
-.section-title {
-    color: #333;
-    margin-bottom: 15px;
-}
-
-/* Notification Styles */
-.notification-item {
-    padding: 15px;
-    border-bottom: 1px solid #ddd;
-    background-color: white;
-}
-
-.notification-time {
-    font-size: 0.85em;
-    color: #666;
-    margin-top: 5px;
-}
-
-.error-message {
-    color: #f44336;
-    padding: 10px;
-    background-color: #ffebee;
-    border-radius: 4px;
-    margin: 10px 0;
 }

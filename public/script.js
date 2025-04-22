@@ -116,7 +116,7 @@ function updateAttendanceTable() {
             <td>${record.grade}</td>
             <td>${new Date(record.time).toLocaleTimeString()}</td>
             <td>${record.time_out ? new Date(record.time_out).toLocaleTimeString() : '-'}</td>
-            <td class="${statusClass}">${status}</td>
+            <td><span class="${statusClass}">${status}</span></td>
         `;
         tableBody.appendChild(row);
     });

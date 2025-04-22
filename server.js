@@ -26,6 +26,23 @@ app.use(session({
     cookie: { secure: false } // set to true if using https
 }));
 
+// Authentication middleware
+const authenticateParent = async (req, res, next) => {
+    const token = req.headers.authorization?.split(' ')[1];
+    
+    if (!token) {
+        return res.status(401).json({ message: 'No token provided' });
+    }
+
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+        req.parentId = decoded.id;
+        next();
+    } catch (error) {
+        return res.status(401).json({ message: 'Invalid token' });
+    }
+};
+
 // Redirect root to login page
 app.get('/', (req, res) => {
     res.redirect('/login.html');
@@ -211,20 +228,6 @@ wss.on('connection', (ws) => {
     console.log('New WebSocket client connected');
     clients.add(ws);
 
-    ws.on('message', (message) => {
-        try {
-            const data = JSON.parse(message);
-            console.log('WebSocket message received:', data);
-            
-            if (data.type === 'scan') {
-                console.log('Processing RFID scan:', data.tagId);
-                processRFIDScan(data.tagId);
-            }
-        } catch (error) {
-            console.error('Error processing WebSocket message:', error);
-        }
-    });
-
     ws.on('close', () => {
         console.log('WebSocket client disconnected');
         clients.delete(ws);
@@ -241,9 +244,8 @@ async function processRFIDScan(tagId) {
             [tagId]
         );
         
-        // If student not found, ignore the scan
         if (students.length === 0) {
-            console.log('Student not found in database, ignoring scan');
+            console.log('Student not found in database');
             return;
         }
 
@@ -272,8 +274,9 @@ async function processRFIDScan(tagId) {
                     name: student.name,
                     grade: student.grade
                 },
-                status: 'checked_in',
-                timestamp: new Date().toISOString()
+                status: 'Checked In',
+                timestamp: new Date().toISOString(),
+                message: `${student.name} has checked in`
             };
         } else {
             // Update existing attendance record with check-out time
@@ -289,8 +292,9 @@ async function processRFIDScan(tagId) {
                     name: student.name,
                     grade: student.grade
                 },
-                status: 'checked_out',
-                timestamp: new Date().toISOString()
+                status: 'Checked Out',
+                timestamp: new Date().toISOString(),
+                message: `${student.name} has checked out`
             };
         }
 
@@ -937,6 +941,42 @@ app.get('/api/parents/:parentId/notifications', async (req, res) => {
     }
 });
 
+// Add endpoint for parent dashboard to fetch latest scan data
+app.get('/api/latest-scan', async (req, res) => {
+    try {
+        // Get the most recent attendance record
+        const [latestAttendance] = await connection.promise().query(`
+            SELECT a.*, s.name, s.grade 
+            FROM attendance a 
+            JOIN students s ON a.student_id = s.student_id 
+            ORDER BY a.time DESC 
+            LIMIT 1
+        `);
+
+        if (latestAttendance.length === 0) {
+            return res.status(404).json({ error: 'No scan data available' });
+        }
+
+        const record = latestAttendance[0];
+        const response = {
+            type: 'scan',
+            student: {
+                student_id: record.student_id,
+                name: record.name,
+                grade: record.grade
+            },
+            status: record.time_out ? 'Checked Out' : 'Checked In',
+            timestamp: record.time_out || record.time,
+            message: `${record.name} has ${record.time_out ? 'checked out' : 'checked in'}`
+        };
+
+        res.json(response);
+    } catch (error) {
+        console.error('Error fetching latest scan:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // Clear today's attendance records
 app.delete('/api/attendance/today', async (req, res) => {
     try {
@@ -1022,68 +1062,11 @@ app.get('/create-test-teacher', async (req, res) => {
     }
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({ error: 'Something broke!' });
-});
+// Store the latest scan data
+let latestScanData = null;
 
-// Handle 404 errors
-app.use((req, res) => {
-    res.status(404).json({ error: 'Not found' });
-});
-
-// Initialize hardware manager
-const hardwareManager = new HardwareManager();
-
-// Function to check if Arduino is connected
-async function checkArduinoConnection() {
-    try {
-        // Try to initialize the hardware manager
-        await hardwareManager.initialize();
-        console.log('Arduino connected successfully');
-        return true;
-    } catch (error) {
-        console.log('Arduino not found. Please connect the Arduino and restart the server.');
-        return false;
-    }
-}
-
-// Initialize hardware with proper error handling
-async function initializeHardware() {
-    try {
-        const isArduinoConnected = await checkArduinoConnection();
-        if (!isArduinoConnected) {
-            console.log('Waiting for Arduino connection...');
-            // Try to reconnect every 5 seconds
-            setTimeout(initializeHardware, 5000);
-            return;
-        }
-
-        // Set up RFID tag read handler
-        hardwareManager.setOnTagRead(async (tagId) => {
-            try {
-                console.log('RFID tag read:', tagId);
-                // Process the scan using the existing scan endpoint logic
-                const response = await processRFIDScan(tagId);
-                broadcast(response);
-            } catch (error) {
-                console.error('Error processing RFID scan:', error);
-            }
-        });
-
-    } catch (error) {
-        console.error('Error initializing hardware:', error);
-        // Try to reconnect after 5 seconds
-        setTimeout(initializeHardware, 5000);
-    }
-}
-
-// Start hardware initialization
-initializeHardware();
-
-// Record attendance
-app.post('/api/attendance/scan', async (req, res) => {
+// Handle RFID scan requests at index page
+app.post('/index.html', async (req, res) => {
     try {
         const { tagId } = req.body;
         console.log('Received scan request for tag:', tagId);
@@ -1104,130 +1087,251 @@ app.post('/api/attendance/scan', async (req, res) => {
         );
 
         if (students.length === 0) {
-            console.log('Student not found, creating new student record');
-            // If student doesn't exist, create a new student record
-            const [result] = await connection.promise().query(
-                'INSERT INTO students (student_id, name, grade) VALUES (?, ?, ?)',
-                [studentId, `Student ${studentId}`, 'Unknown']
-            );
-
-            const newStudent = {
-                id: result.insertId,
-                student_id: studentId,
-                name: `Student ${studentId}`,
-                grade: 'Unknown'
-            };
-
-            // Create attendance record for new student
-            const [attendanceResult] = await connection.promise().query(
-                'INSERT INTO attendance (student_id, time) VALUES (?, NOW())',
-                [studentId]
-            );
-
-            console.log('Created new attendance record:', attendanceResult);
-
-            const response = {
-                success: true,
-                student: {
-                    id: newStudent.id,
-                    name: newStudent.name,
-                    grade: newStudent.grade
-                },
-                status: 'Checked In',
-                message: `${newStudent.name} has checked in`,
-                timestamp: new Date().toISOString()
-            };
-
-            // Broadcast the scan event
-            broadcast({
-                type: 'scan',
-                ...response
-            });
-
-            return res.json(response);
+            console.error('Student not found');
+            return res.status(404).json({ error: 'Student not found' });
         }
 
         const student = students[0];
-        console.log('Found existing student:', student);
 
-        // Check if student has already checked in today
-        const [existingRecords] = await connection.promise().query(
-            'SELECT * FROM attendance WHERE student_id = ? AND DATE(time) = CURDATE()',
-            [studentId]
+        // Get latest attendance record for this student
+        const [attendance] = await connection.promise().query(
+            'SELECT * FROM attendance WHERE student_id = ? ORDER BY time DESC LIMIT 1',
+            [student.student_id]
         );
 
-        console.log('Existing attendance records:', existingRecords);
+        let response;
 
-        let status;
-        let message;
-        let attendanceId;
-
-        if (existingRecords.length === 0) {
-            // First check-in of the day
-            console.log('No existing records, creating new check-in');
+        if (attendance.length === 0 || attendance[0].time_out !== null) {
+            // Create new attendance record (check-in)
             const [result] = await connection.promise().query(
                 'INSERT INTO attendance (student_id, time) VALUES (?, NOW())',
-                [studentId]
+                [student.student_id]
             );
-            attendanceId = result.insertId;
-            status = 'Checked In';
-            message = `${student.name} has checked in`;
+            console.log('Created new attendance record:', result);
+            response = {
+                type: 'scan',
+                success: true,
+                student: {
+                    id: student.id,
+                    student_id: student.student_id,
+                    name: student.name,
+                    grade: student.grade
+                },
+                status: 'Checked In',
+                message: `${student.name} has checked in`,
+                timestamp: new Date().toISOString()
+            };
         } else {
-            const record = existingRecords[0];
-            if (!record.time_out) {
-                // Check out
-                console.log('Updating existing record with check-out time');
-                await connection.promise().query(
-                    'UPDATE attendance SET time_out = NOW() WHERE id = ?',
-                    [record.id]
-                );
-                attendanceId = record.id;
-                status = 'Checked Out';
-                message = `${student.name} has checked out`;
-            } else {
-                // Already checked out
-                console.log('Student already checked out, creating new check-in');
-                const [result] = await connection.promise().query(
-                    'INSERT INTO attendance (student_id, time) VALUES (?, NOW())',
-                    [studentId]
-                );
-                attendanceId = result.insertId;
-                status = 'Checked In';
-                message = `${student.name} has checked in`;
-            }
+            // Update existing attendance record with check-out time
+            await connection.promise().query(
+                'UPDATE attendance SET time_out = NOW() WHERE id = ?',
+                [attendance[0].id]
+            );
+            response = {
+                type: 'scan',
+                success: true,
+                student: {
+                    id: student.id,
+                    student_id: student.student_id,
+                    name: student.name,
+                    grade: student.grade
+                },
+                status: 'Checked Out',
+                message: `${student.name} has checked out`,
+                timestamp: new Date().toISOString()
+            };
         }
 
-        console.log('Final status:', status);
+        // Store the latest scan data
+        latestScanData = response;
 
-        const response = {
-            success: true,
-            student: {
-                id: student.id,
-                name: student.name,
-                grade: student.grade
-            },
-            status,
-            message,
-            timestamp: new Date().toISOString()
-        };
-
-        // Broadcast the scan event
-        broadcast({
-            type: 'scan',
-            ...response
-        });
-
-        res.json(response);
-
+        // Broadcast the response to all connected clients
+        broadcast(response);
+        return res.json(response);
     } catch (error) {
         console.error('Error processing RFID scan:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        return res.status(500).json({ error: 'Internal server error' });
     }
 });
 
+// Error handling middleware
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).json({ error: 'Something broke!' });
+});
+
+// Handle 404 errors
+app.use((req, res) => {
+    res.status(404).json({ error: 'Not found' });
+});
+
+// Initialize hardware manager
+const hardwareManager = new HardwareManager();
+
+// Update the hardware initialization section
+async function initializeHardware() {
+    try {
+        console.log('Hardware initialization started...');
+        // No need to check for Arduino connection since we're using WiFi
+        console.log('System ready to receive RFID scans over WiFi');
+        
+        // Set up RFID tag read handler
+        app.post('/api/attendance/scan', async (req, res) => {
+            try {
+                const { tagId } = req.body;
+                console.log('Received scan request for tag:', tagId);
+
+                if (!tagId) {
+                    console.error('No tag ID provided');
+                    return res.status(400).json({ error: 'Tag ID is required' });
+                }
+
+                // Use the tag ID directly as the student ID
+                const studentId = tagId.replace(/\s+/g, '');
+                console.log('Looking up student with ID:', studentId);
+
+                // Find student by student ID
+                const [students] = await connection.promise().query(
+                    'SELECT * FROM students WHERE student_id = ?',
+                    [studentId]
+                );
+
+                if (students.length === 0) {
+                    console.log('Student not found, creating new student record');
+                    // If student doesn't exist, create a new student record
+                    const [result] = await connection.promise().query(
+                        'INSERT INTO students (student_id, name, grade) VALUES (?, ?, ?)',
+                        [studentId, `Student ${studentId}`, 'Unknown']
+                    );
+
+                    const newStudent = {
+                        id: result.insertId,
+                        student_id: studentId,
+                        name: `Student ${studentId}`,
+                        grade: 'Unknown'
+                    };
+
+                    // Create attendance record for new student
+                    const [attendanceResult] = await connection.promise().query(
+                        'INSERT INTO attendance (student_id, time) VALUES (?, NOW())',
+                        [studentId]
+                    );
+
+                    console.log('Created new attendance record:', attendanceResult);
+
+                    const response = {
+                        success: true,
+                        student: {
+                            id: newStudent.id,
+                            name: newStudent.name,
+                            grade: newStudent.grade
+                        },
+                        status: 'Checked In',
+                        message: `${newStudent.name} has checked in`,
+                        timestamp: new Date().toISOString()
+                    };
+
+                    // Broadcast the scan event
+                    broadcast({
+                        type: 'scan',
+                        ...response
+                    });
+
+                    return res.json(response);
+                }
+
+                const student = students[0];
+                console.log('Found existing student:', student);
+
+                // Get the most recent attendance record for today
+                const [existingRecords] = await connection.promise().query(
+                    'SELECT * FROM attendance WHERE student_id = ? AND DATE(time) = CURDATE() ORDER BY time DESC LIMIT 1',
+                    [studentId]
+                );
+
+                console.log('Existing attendance records:', existingRecords);
+
+                let status;
+                let message;
+                let attendanceId;
+
+                if (existingRecords.length === 0) {
+                    // No records for today, create a new check-in
+                    console.log('No existing records, creating new check-in');
+                    const [result] = await connection.promise().query(
+                        'INSERT INTO attendance (student_id, time) VALUES (?, NOW())',
+                        [studentId]
+                    );
+                    attendanceId = result.insertId;
+                    status = 'Checked In';
+                    message = `${student.name} has checked in`;
+                } else {
+                    const record = existingRecords[0];
+                    if (!record.time_out) {
+                        // Student is checked in, so check them out
+                        console.log('Updating existing record with check-out time');
+                        await connection.promise().query(
+                            'UPDATE attendance SET time_out = NOW() WHERE id = ?',
+                            [record.id]
+                        );
+                        attendanceId = record.id;
+                        status = 'Checked Out';
+                        message = `${student.name} has checked out`;
+                    } else {
+                        // Student is checked out, create a new check-in
+                        console.log('Student checked out, creating new check-in');
+                        const [result] = await connection.promise().query(
+                            'INSERT INTO attendance (student_id, time) VALUES (?, NOW())',
+                            [studentId]
+                        );
+                        attendanceId = result.insertId;
+                        status = 'Checked In';
+                        message = `${student.name} has checked in`;
+                    }
+                }
+
+                console.log('Final status:', status);
+
+                const response = {
+                    success: true,
+                    student: {
+                        id: student.id,
+                        name: student.name,
+                        grade: student.grade
+                    },
+                    status,
+                    message,
+                    timestamp: new Date().toISOString()
+                };
+
+                // Broadcast the scan event
+                broadcast({
+                    type: 'scan',
+                    ...response
+                });
+
+                res.json(response);
+
+            } catch (error) {
+                console.error('Error processing RFID scan:', error);
+                res.status(500).json({ error: 'Internal server error' });
+            }
+        });
+
+    } catch (error) {
+        console.error('Error initializing hardware:', error);
+    }
+}
+
+// Start hardware initialization
+initializeHardware();
+
 // Start the server
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+const HOST = '0.0.0.0'; // Listen on all network interfaces
+server.listen(PORT, HOST, () => {
     console.log(`Server running on port ${PORT}`);
-    console.log(`Open http://localhost:${PORT} in your browser.`);
+    console.log(`Access the webapp at:`);
+    console.log(`- Local: http://localhost:${PORT}`);
+    console.log(`- Network: http://<your-ip-address>:${PORT}`);
 });
