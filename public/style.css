@@ -517,18 +517,29 @@ nav a.active {
 }
 
 /* Status Colors */
-.status-checked-in, .status-checked-out {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+.status,
+.status-checked-in,
+.status-checked-out,
+.status.checked-in,
+.status.checked-out {
+    color: inherit;
     font-weight: 600;
-    font-size: 1rem;
 }
 
-.status-checked-in {
+.status-checked-in,
+.status.checked-in {
     color: #2e7d32;
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-align: left;
 }
 
-.status-checked-out {
-    color: #c62828;
+.status-checked-out,
+.status.checked-out {
+    color: #d84315;
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-align: left;
 }
 
 /* Table Styles */
@@ -569,32 +580,16 @@ nav a.active {
 }
 
 /* Status Indicators in Table */
-.status-checked-in,
-.status-checked-out {
-    display: inline-block;
-    padding: 6px 12px;
-    border-radius: 20px;
-    font-weight: 600;
-    font-size: 0.9rem;
-    text-align: center;
-    min-width: 100px;
-}
-
-.status-checked-in {
-    background-color: #e8f5e9;
-    color: #2e7d32;
-    border: 1px solid #c8e6c9;
-}
-
-.status-checked-out {
-    background-color: #ffebee;
-    color: #c62828;
-    border: 1px solid #ffcdd2;
+.attendance-table td .status-checked-out,
+.attendance-table td .status-checked-in {
+    display: block;
+    margin: 0;
+    padding: 0;
 }
 
 /* Center align the status column */
 .attendance-table td:last-child {
-    text-align: center;
+    text-align: left;
 }
 
 .rfid-status {
@@ -872,23 +867,14 @@ nav a.active {
     width: 50%;
 }
 
-.status-checked-in,
-.status-checked-out {
-    display: inline-block;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-weight: 600;
-    font-size: 0.9rem;
+.attendance-table td {
+    vertical-align: middle;
+    border-bottom: 1px solid #e0e0e0;
+    height: 48px;
 }
 
-.status-checked-in {
-    background-color: #e8f5e9;
-    color: #2e7d32;
-}
-
-.status-checked-out {
-    background-color: #fbe9e7;
-    color: #d84315;
+.attendance-table tr {
+    height: 48px;
 }
 
 .rfid-status {

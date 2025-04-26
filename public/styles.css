@@ -109,22 +109,6 @@ body {
 }
 
 /* Attendance Status Styles */
-.status {
-    padding: 0.5rem 1rem;
-    border-radius: 4px;
-    font-weight: bold;
-    text-align: center;
-}
-
-.status.checked-in {
-    background-color: #4caf50;
-    color: white;
-}
-
-.status.checked-out {
-    background-color: #f44336;
-    color: white;
-}
 
 .attendance-table {
     width: 100%;
