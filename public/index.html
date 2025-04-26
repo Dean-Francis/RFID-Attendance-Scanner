@@ -5,80 +5,89 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RFID Attendance System</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Add jsPDF and its dependencies -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>RFID Attendance System</h1>
-            <div class="battery-status">
-                <span>Battery Level: </span>
-                <div class="battery-level">100%</div>
-            </div>
-            <div class="user-info">
-                Welcome, <span id="teacherName">Teacher</span>
-                <button id="logoutBtn">Logout</button>
+            <div class="header-top">
+                <h1><i class="fas fa-id-card"></i> RFID Attendance System</h1>
+                <div class="battery-status">
+                    <i class="fas fa-battery-full"></i>
+                    <div class="battery-level">100%</div>
+                </div>
+                <div class="user-info">
+                    <i class="fas fa-user"></i>
+                    <span id="teacherName">Teacher</span>
+                    <button id="logoutBtn"><i class="fas fa-sign-out-alt"></i> Logout</button>
+                </div>
             </div>
             <nav>
-                <a href="index.html" class="active">Dashboard</a>
-                <a href="reports.html">Reports</a>
+                <a href="index.html" class="active"><i class="fas fa-home"></i> Dashboard</a>
+                <a href="reports.html"><i class="fas fa-chart-bar"></i> Reports</a>
             </nav>
-            <button id="openLoginModal">Login</button>
         </header>
 
         <main>
             <section class="scanner-section">
-                <h2>RFID Scanner</h2>
+                <h2><i class="fas fa-wifi"></i> RFID Scanner</h2>
                 <div class="scanner-status">
                     <div class="status-indicator active"></div>
-                    <span>Scanner Ready</span>
+                    <span>Scanner Status: </span>
+                    <span id="rfidStatus" class="status-disconnected">Disconnected</span>
                 </div>
                 <div class="last-scan">
-                    <h3>Last Scan</h3>
-                    <p id="lastScanTime">No scans yet</p>
-                    <p id="lastStudent">No student data</p>
+                    <h3><i class="fas fa-clock"></i> Last Scan</h3>
+                    <p><i class="fas fa-calendar"></i> Time: <span id="lastScanTime">No scans yet</span></p>
+                    <p><i class="fas fa-user-graduate"></i> Student: <span id="lastStudent">No student data</span></p>
                 </div>
             </section>
 
             <section class="attendance-section">
-                <h2>Today's Attendance</h2>
+                <h2><i class="fas fa-clipboard-list"></i> Today's Attendance</h2>
                 <div class="attendance-list">
                     <div class="rfid-status">
-                        <div id="rfidStatus">RFID Reader: <span class="status-disconnected">Disconnected</span></div>
-                        <div id="lastScan">Last Scan: <span class="no-scan">No scans yet</span></div>
+                        <div><i class="fas fa-signal"></i> RFID Reader: <span class="status-disconnected">Disconnected</span></div>
+                        <div><i class="fas fa-history"></i> Last Scan: <span class="no-scan">No scans yet</span></div>
                     </div>
-                    <table id="attendanceTable">
-                        <thead>
-                            <tr>
-                                <th>Student ID</th>
-                                <th>Name</th>
-                                <th>Grade</th>
-                                <th>Time In</th>
-                                <th>Time Out</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody id="attendanceTableBody"></tbody>
-                    </table>
+                    <div class="table-container">
+                        <table id="attendanceTable">
+                            <thead>
+                                <tr>
+                                    <th>Student ID</th>
+                                    <th>Name</th>
+                                    <th>Grade</th>
+                                    <th>Time In</th>
+                                    <th>Time Out</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="attendanceTableBody"></tbody>
+                        </table>
+                    </div>
                 </div>
             </section>
 
             <section class="settings-section">
-                <h2>System Settings</h2>
+                <h2><i class="fas fa-cog"></i> System Settings</h2>
                 <div class="settings-grid">
                     <div class="setting-item">
-                        <label>Solar Panel Status</label>
+                        <label><i class="fas fa-solar-panel"></i> Solar Panel Status</label>
                         <div class="status-indicator charging"></div>
                     </div>
                     <div class="setting-item">
-                        <label>Parent Notifications</label>
-                        <button id="toggleNotifications">Enabled</button>
+                        <label><i class="fas fa-bell"></i> Parent Notifications</label>
+                        <button id="toggleNotifications" class="toggle-btn">
+                            <i class="fas fa-toggle-on"></i> Enabled
+                        </button>
                     </div>
                     <div class="setting-item">
-                        <label>Student Management</label>
-                        <button id="addStudentBtn">Add New Student</button>
+                        <label><i class="fas fa-users"></i> Student Management</label>
+                        <button id="addStudentBtn" class="primary-btn">
+                            <i class="fas fa-user-plus"></i> Add New Student
+                        </button>
                     </div>
                 </div>
             </section>
@@ -88,29 +97,31 @@
     <!-- Add Student Modal -->
     <div id="addStudentModal" class="modal">
         <div class="modal-content">
-            <span id="closeModal" class="close">&times;</span>
-            <h2>Add New Student</h2>
+            <span id="closeModal" class="close"><i class="fas fa-times"></i></span>
+            <h2><i class="fas fa-user-plus"></i> Add New Student</h2>
             <form id="addStudentForm">
                 <div class="form-group">
-                    <label for="newStudentId">Student ID:</label>
+                    <label for="newStudentId"><i class="fas fa-id-badge"></i> Student ID:</label>
                     <input type="text" id="newStudentId" name="studentId" required>
                 </div>
                 <div class="form-group">
-                    <label for="newStudentName">Name:</label>
+                    <label for="newStudentName"><i class="fas fa-user"></i> Name:</label>
                     <input type="text" id="newStudentName" name="studentName" required>
                 </div>
                 <div class="form-group">
-                    <label for="newStudentGrade">Grade:</label>
+                    <label for="newStudentGrade"><i class="fas fa-graduation-cap"></i> Grade:</label>
                     <input type="text" id="newStudentGrade" name="studentGrade" required>
                 </div>
                 <div class="form-group">
-                    <label for="newParentPhone">Parent Phone:</label>
+                    <label for="newParentPhone"><i class="fas fa-phone"></i> Parent Phone:</label>
                     <input type="tel" id="newParentPhone" name="parentPhone" required 
                            pattern="05[0-9]\s[0-9]{3}\s[0-9]{4}" 
                            placeholder="051 123 4567"
                            title="Phone number must be in format: 051 123 4567">
                 </div>
-                <button type="submit">Add Student</button>
+                <button type="submit" class="primary-btn">
+                    <i class="fas fa-plus-circle"></i> Add Student
+                </button>
             </form>
             <div id="message"></div>
         </div>
@@ -119,18 +130,20 @@
     <!-- Login Modal -->
     <div id="loginModal" class="modal">
         <div class="modal-content">
-            <span id="closeLoginModal" class="close">&times;</span>
-            <h2>Login</h2>
+            <span id="closeLoginModal" class="close"><i class="fas fa-times"></i></span>
+            <h2><i class="fas fa-sign-in-alt"></i> Login</h2>
             <form id="loginForm">
                 <div class="form-group">
-                    <label for="username">Username:</label>
+                    <label for="username"><i class="fas fa-user"></i> Username:</label>
                     <input type="text" id="username" name="username" required>
                 </div>
                 <div class="form-group">
-                    <label for="password">Password:</label>
+                    <label for="password"><i class="fas fa-lock"></i> Password:</label>
                     <input type="password" id="password" name="password" required>
                 </div>
-                <button type="submit">Login</button>
+                <button type="submit" class="primary-btn">
+                    <i class="fas fa-sign-in-alt"></i> Login
+                </button>
             </form>
             <div id="loginMessage" class="message"></div>
         </div>

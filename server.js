@@ -549,39 +549,33 @@ app.get('/api/attendance/range', (req, res) => {
 
 // Add/Update student endpoint
 app.post('/api/students', async (req, res) => {
-    const { student_id, card_id, name, grade, parent_phone } = req.body;
+    const { student_id, name, grade, parent_phone } = req.body;
     
     if (!student_id || !name || !grade) {
         return res.status(400).json({ error: 'Student ID, name, and grade are required' });
     }
 
     try {
-        // Check if student exists by either student_id or card_id
+        // Check if student exists by student_id only
         const [existingStudents] = await connection.promise().query(
-            'SELECT * FROM students WHERE student_id = ? OR (card_id = ? AND card_id IS NOT NULL)',
-            [student_id, card_id]
+            'SELECT * FROM students WHERE student_id = ?',
+            [student_id]
         );
 
         if (existingStudents.length > 0) {
-            const student = existingStudents[0];
-            if (student.student_id === student_id) {
-                return res.status(400).json({ error: 'Student ID already exists' });
-            } else {
-                return res.status(400).json({ error: 'Card ID already exists' });
-            }
+            return res.status(400).json({ error: 'Student ID already exists' });
         }
 
         // Insert new student
         const [result] = await connection.promise().query(
-            'INSERT INTO students (student_id, card_id, name, grade, parent_phone) VALUES (?, ?, ?, ?, ?)',
-            [student_id, card_id, name, grade, parent_phone]
+            'INSERT INTO students (student_id, name, grade, parent_phone) VALUES (?, ?, ?, ?)',
+            [student_id, name, grade, parent_phone]
         );
 
         res.status(201).json({ 
             message: 'Student added successfully',
             student: { 
-                student_id, 
-                card_id,
+                student_id,
                 name, 
                 grade, 
                 parent_phone 
@@ -754,13 +748,18 @@ app.get('/api/teachers/profile', isAuthenticated, (req, res) => {
 
 // Parent login
 app.post('/api/parents/login', async (req, res) => {
+    console.log('Parent login attempt received');
+    
     const { username, password } = req.body;
     
     if (!username || !password) {
+        console.log('Login failed: Missing credentials');
         return res.status(400).json({ error: 'Username and password are required' });
     }
 
     try {
+        console.log('Looking up parent with username:', username);
+        
         // Get parent from database
         const [parents] = await connection.promise().query(
             'SELECT * FROM parents WHERE username = ?',
@@ -768,15 +767,32 @@ app.post('/api/parents/login', async (req, res) => {
         );
 
         if (parents.length === 0) {
+            console.log('Login failed: Parent not found with username:', username);
             return res.status(401).json({ error: 'Invalid username or password' });
         }
 
         const parent = parents[0];
+        console.log('Parent found, verifying password...');
+        
         const validPassword = await bcrypt.compare(password, parent.password);
+        console.log('Password verification result:', validPassword);
 
         if (!validPassword) {
+            console.log('Login failed: Invalid password for username:', username);
             return res.status(401).json({ error: 'Invalid username or password' });
         }
+
+        // Get the parent's students
+        console.log('Getting student information for parent ID:', parent.id);
+        const [students] = await connection.promise().query(
+            `SELECT s.name, s.student_id, s.grade 
+             FROM students s
+             JOIN parent_student ps ON s.student_id = ps.student_id
+             WHERE ps.parent_id = ?`,
+            [parent.id]
+        );
+        
+        console.log('Found students for parent:', students.length);
 
         // Create JWT token
         const token = jwt.sign(
@@ -788,15 +804,8 @@ app.post('/api/parents/login', async (req, res) => {
             process.env.JWT_SECRET || 'your-secret-key',
             { expiresIn: '24h' }
         );
-
-        // Get the parent's students
-        const [students] = await connection.promise().query(
-            `SELECT s.name, s.student_id, s.grade 
-             FROM students s
-             JOIN parent_student ps ON s.student_id = ps.student_id
-             WHERE ps.parent_id = ?`,
-            [parent.id]
-        );
+        
+        console.log('Login successful for username:', username);
 
         res.json({
             message: 'Login successful',
@@ -809,25 +818,64 @@ app.post('/api/parents/login', async (req, res) => {
             token
         });
     } catch (error) {
-        console.error('Login error:', error);
-        res.status(500).json({ error: 'An error occurred during login' });
+        console.error('Login error occurred:');
+        console.error('Error name:', error.name);
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+        if (error.code) {
+            console.error('Database error details:');
+            console.error('Error code:', error.code);
+            console.error('SQL Message:', error.sqlMessage);
+            console.error('SQL State:', error.sqlState);
+        }
+        res.status(500).json({ 
+            error: 'An error occurred during login',
+            details: error.message
+        });
     }
 });
 
 // Parent registration
 app.post('/api/parents/register', async (req, res) => {
-    console.log('Parent registration request received:', req.body);
-    
-    const { username, password, name, email, phone, studentId, cardId, relationship } = req.body;
-    
-    // Validate required fields
-    if (!username || !password || !name || !email || !phone || (!studentId && !cardId) || !relationship) {
-        console.error('Registration error: Missing required fields');
-        return res.status(400).json({ error: 'All fields are required. Either Student ID or Card ID must be provided.' });
-    }
-
     try {
+        console.log('Parent registration request received:', {
+            ...req.body,
+            password: '[REDACTED]' // Don't log the password
+        });
+        
+        const { username, password, name, email, phone, studentId, relationship } = req.body;
+        
+        // Log all received fields
+        console.log('Received fields:', {
+            username: !!username,
+            name: !!name,
+            email: !!email,
+            phone: !!phone,
+            studentId: !!studentId,
+            relationship: !!relationship,
+            password: !!password
+        });
+        
+        // Validate required fields
+        const missingFields = [];
+        if (!username) missingFields.push('username');
+        if (!password) missingFields.push('password');
+        if (!name) missingFields.push('name');
+        if (!email) missingFields.push('email');
+        if (!phone) missingFields.push('phone');
+        if (!studentId) missingFields.push('studentId');
+        if (!relationship) missingFields.push('relationship');
+        
+        if (missingFields.length > 0) {
+            console.error('Registration error: Missing fields:', missingFields);
+            return res.status(400).json({ 
+                error: 'All fields are required.',
+                details: `Missing fields: ${missingFields.join(', ')}`
+            });
+        }
+
         // Check if username or email already exists
+        console.log('Checking for existing parent...');
         const [existingParents] = await connection.promise().query(
             'SELECT * FROM parents WHERE username = ? OR email = ?',
             [username, email]
@@ -838,59 +886,100 @@ app.post('/api/parents/register', async (req, res) => {
             const isDuplicateEmail = existingParents.some(p => p.email === email);
             
             if (isDuplicateUsername) {
+                console.log('Username already exists:', username);
                 return res.status(400).json({ error: 'Username already exists' });
             }
             if (isDuplicateEmail) {
+                console.log('Email already exists:', email);
                 return res.status(400).json({ error: 'Email already exists' });
             }
         }
 
-        // Check if student exists by either student ID or card ID
+        // Check if student exists
+        console.log('Checking for student:', studentId);
         const [students] = await connection.promise().query(
-            'SELECT * FROM students WHERE student_id = ? OR (card_id = ? AND card_id IS NOT NULL)',
-            [studentId, cardId]
+            'SELECT * FROM students WHERE student_id = ?',
+            [studentId]
         );
 
         if (students.length === 0) {
-            return res.status(400).json({ error: 'Student not found. Please verify the Student ID or Card ID.' });
+            console.log('Student not found:', studentId);
+            return res.status(400).json({ error: 'Student not found. Please verify the Student ID.' });
         }
 
         const student = students[0];
+        console.log('Found student:', student.name);
 
         // Hash password
+        console.log('Hashing password...');
         const hashedPassword = await bcrypt.hash(password, 10);
+        console.log('Password hashed successfully');
 
         // Start transaction
+        console.log('Starting transaction...');
         const conn = await connection.promise();
         await conn.beginTransaction();
 
         try {
             // Insert parent
+            console.log('Inserting parent record...');
+            const cleanPhone = phone.replace(/\s/g, ''); // Remove spaces
+            console.log('Cleaned phone number:', cleanPhone);
+            
             const [parentResult] = await conn.query(
                 'INSERT INTO parents (username, password, name, email, phone) VALUES (?, ?, ?, ?, ?)',
-                [username, hashedPassword, name, email, phone]
+                [username, hashedPassword, name, email, cleanPhone]
             );
+            console.log('Parent inserted successfully, ID:', parentResult.insertId);
 
             // Link parent to student
+            console.log('Linking parent to student...');
             await conn.query(
                 'INSERT INTO parent_student (parent_id, student_id, relationship) VALUES (?, ?, ?)',
                 [parentResult.insertId, student.student_id, relationship]
             );
+            console.log('Parent-student relationship created');
 
             await conn.commit();
-            console.log('Parent registered successfully:', { username, name, email });
+            console.log('Transaction committed successfully');
+            
             res.status(201).json({ 
                 message: 'Parent registered successfully',
                 studentName: student.name
             });
         } catch (error) {
+            console.error('Transaction error occurred:');
+            console.error('Error code:', error.code);
+            console.error('SQL Message:', error.sqlMessage);
+            console.error('SQL State:', error.sqlState);
+            console.error('SQL Query:', error.sql);
+            console.error('Full error:', error);
+            
             await conn.rollback();
-            console.error('Transaction error:', error);
-            throw error;
+            console.log('Transaction rolled back');
+            
+            res.status(500).json({ 
+                error: 'Database error during registration',
+                details: error.sqlMessage || error.message
+            });
         }
     } catch (error) {
-        console.error('Registration error:', error);
-        res.status(500).json({ error: 'An error occurred during registration' });
+        console.error('Registration error occurred:');
+        console.error('Error name:', error.name);
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+        if (error.code) {
+            console.error('Error code:', error.code);
+            console.error('SQL Message:', error.sqlMessage);
+            console.error('SQL State:', error.sqlState);
+            console.error('SQL Query:', error.sql);
+        }
+        console.error('Full error:', error);
+        
+        res.status(500).json({ 
+            error: 'An error occurred during registration',
+            details: error.message
+        });
     }
 });
 
@@ -1281,7 +1370,15 @@ async function initializeHardware() {
 
                 if (!tagId) {
                     console.error('No tag ID provided');
-                    return res.status(400).json({ error: 'Tag ID is required' });
+                    const response = {
+                        success: false,
+                        error: 'Tag ID is required',
+                        type: 'scan',
+                        status: 'Error',
+                        message: 'No tag ID provided'
+                    };
+                    broadcast(response);
+                    return res.status(400).json(response);
                 }
 
                 // Use the tag ID directly as the student ID
@@ -1295,47 +1392,17 @@ async function initializeHardware() {
                 );
 
                 if (students.length === 0) {
-                    console.log('Student not found, creating new student record');
-                    // If student doesn't exist, create a new student record
-                    const [result] = await connection.promise().query(
-                        'INSERT INTO students (student_id, name, grade) VALUES (?, ?, ?)',
-                        [studentId, `Student ${studentId}`, 'Unknown']
-                    );
-
-                    const newStudent = {
-                        id: result.insertId,
-                        student_id: studentId,
-                        name: `Student ${studentId}`,
-                        grade: 'Unknown'
-                    };
-
-                    // Create attendance record for new student
-                    const [attendanceResult] = await connection.promise().query(
-                        'INSERT INTO attendance (student_id, time) VALUES (?, NOW())',
-                        [studentId]
-                    );
-
-                    console.log('Created new attendance record:', attendanceResult);
-
+                    console.error('Unknown card scanned:', studentId);
                     const response = {
-                        success: true,
-                        student: {
-                            id: newStudent.id,
-                            name: newStudent.name,
-                            grade: newStudent.grade
-                        },
-                        status: 'Checked In',
-                        message: `${newStudent.name} has checked in`,
+                        success: false,
+                        error: 'Unknown card',
+                        type: 'scan',
+                        status: 'Error',
+                        message: `Unknown card scanned (ID: ${studentId}). Please register this card first.`,
                         timestamp: new Date().toISOString()
                     };
-
-                    // Broadcast the scan event
-                    broadcast({
-                        type: 'scan',
-                        ...response
-                    });
-
-                    return res.json(response);
+                    broadcast(response);
+                    return res.status(404).json(response);
                 }
 
                 const student = students[0];

@@ -34,25 +34,32 @@ let reconnectAttempts = 0;
 let reconnectTimeout = null;
 
 function showMessage(message, type = 'info') {
-    const container = document.getElementById('messageContainer');
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `alert alert-${type}`;
-    messageDiv.textContent = message;
-    container.appendChild(messageDiv);
+    const messageContainer = document.getElementById('messageContainer');
+    if (!messageContainer) {
+        console.error('Message container not found');
+        return;
+    }
 
-    // Auto-dismiss after timeout
+    const messageElement = document.createElement('div');
+    messageElement.className = `message ${type}`;
+    messageElement.textContent = message;
+
+    messageContainer.innerHTML = '';
+    messageContainer.appendChild(messageElement);
+
+    // Auto-dismiss after 3 seconds
     setTimeout(() => {
-        if (messageDiv.parentNode === container) {
-            container.removeChild(messageDiv);
+        if (messageElement.parentNode === messageContainer) {
+            messageContainer.removeChild(messageElement);
         }
-    }, MESSAGE_TIMEOUT);
+    }, 3000);
 }
 
-function updateHardwareStatus(connected) {
+function updateHardwareStatus(status) {
     const statusElement = document.getElementById('hardwareStatus');
     if (statusElement) {
-        statusElement.textContent = connected ? 'Connected' : 'Disconnected';
-        statusElement.className = connected ? 'status-connected' : 'status-disconnected';
+        statusElement.textContent = status;
+        statusElement.className = status === 'Connected' ? 'status-connected' : 'status-disconnected';
     }
 }
 
@@ -110,13 +117,28 @@ function setupWebSocket() {
 function handleWebSocketMessage(event) {
     try {
         const data = JSON.parse(event.data);
-        
+        console.log('WebSocket message received:', data);
+
         if (data.type === 'scan') {
-            // Only update if the scan is for the parent's child
-            const parentId = localStorage.getItem('parentId');
-            if (data.parentId === parseInt(parentId)) {
-                updateLatestScan(data);
-                showMessage(`Scan recorded for ${data.student.name}`, 'success');
+            if (!data.success) {
+                // Handle error cases
+                showMessage(data.message, 'error');
+                updateHardwareStatus('Connected');
+                return;
+            }
+
+            // Handle successful scan
+            showMessage(data.message, 'success');
+            updateHardwareStatus('Connected');
+            
+            // Refresh the latest scan data
+            loadLatestScan();
+            
+            // Refresh attendance data if it's today's scan
+            const scanDate = new Date(data.timestamp);
+            const today = new Date();
+            if (scanDate.toDateString() === today.toDateString()) {
+                loadTodayAttendance();
             }
         } else if (data.type === 'error') {
             showMessage(data.message || 'An error occurred', 'error');

@@ -1,30 +1,31 @@
 # RFID Attendance System
 
-A web-based attendance tracking system using RFID technology for schools. The system allows teachers to track student attendance, generate reports, and provides a parent portal for monitoring their children's attendance.
+A web-based attendance tracking system using RFID technology. The system allows schools to track student attendance in real-time using RFID cards, with separate portals for teachers and parents.
 
 ## Features
 
-- Real-time RFID card scanning for attendance
-- Teacher dashboard for monitoring attendance
-- Detailed attendance reports with export options (CSV/PDF)
-- Parent portal for viewing child's attendance
-- Battery and solar charging status monitoring
-- Student management system
-- Secure authentication for teachers and parents
+- Real-time attendance tracking using RFID cards
+- Separate login portals for teachers and parents
+- Live attendance updates via WebSocket
+- Detailed attendance reports and analytics
+- Parent notifications for student check-in/check-out
+- Dark mode support
+- Responsive design for all devices
 
 ## Technology Stack
 
-- Frontend: HTML, CSS, JavaScript
-- Backend: Node.js, Express.js
-- Database: MySQL
-- Authentication: JWT, bcrypt
-- Additional Libraries: jsPDF for PDF generation
+- **Frontend**: HTML, CSS, JavaScript
+- **Backend**: Node.js, Express.js
+- **Database**: MySQL
+- **Real-time Updates**: WebSocket (ws)
+- **Authentication**: JWT, bcrypt
+- **RFID Communication**: WiFi-based RFID reader integration
 
 ## Prerequisites
 
 - Node.js (v14 or higher)
-- MySQL (v8 or higher)
-- Web browser with JavaScript enabled
+- MySQL (v5.7 or higher)
+- RFID Reader Hardware (compatible with WiFi)
 
 ## Installation
 
@@ -40,18 +41,18 @@ A web-based attendance tracking system using RFID technology for schools. The sy
    ```
 
 3. Create a `.env` file in the root directory with the following variables:
-   ```
+   ```env
    DB_HOST=localhost
    DB_USER=your_database_user
    DB_PASSWORD=your_database_password
    DB_NAME=rfid_attendance
+   JWT_SECRET=your_jwt_secret
    PORT=3000
    ```
 
-4. Create the MySQL database:
+4. Initialize the database:
    ```bash
-   mysql -u root -p
-   CREATE DATABASE rfid_attendance;
+   # The tables will be created automatically when you first run the server
    ```
 
 5. Start the server:
@@ -59,41 +60,32 @@ A web-based attendance tracking system using RFID technology for schools. The sy
    node server.js
    ```
 
-6. Open your browser and navigate to:
-   ```
-   http://localhost:3000
-   ```
-
-## Usage
-
-### Teacher Portal
-
-1. Register/Login through the teacher portal
-2. Monitor real-time attendance
-3. Add/manage students
-4. Generate and export attendance reports
-5. View system status
-
-### Parent Portal
-
-1. Register/Login through the parent portal
-2. View child's attendance records
-3. Receive notifications for check-in/check-out events
+6. Access the application:
+   - Open `http://localhost:3000` in your browser
+   - Teacher portal: `http://localhost:3000/login.html`
+   - Parent portal: `http://localhost:3000/parent-login.html`
 
 ## Project Structure
 
 ```
-├── public/
-│   ├── index.html
-│   ├── login.html
-│   ├── reports.html
-│   ├── style.css
-│   ├── script.js
-│   └── reports.js
-├── server.js
-├── package.json
-└── .env
+├── public/                 # Static files
+│   ├── styles.css         # Global styles
+│   ├── login.html         # Teacher login page
+│   ├── parent-login.html  # Parent login page
+│   └── ...               # Other frontend files
+├── hardware/              # RFID hardware integration
+├── server.js             # Main server file
+├── package.json          # Project dependencies
+└── README.md            # Project documentation
 ```
+
+## Security Features
+
+- Password hashing using bcrypt
+- JWT-based authentication
+- Input validation and sanitization
+- Secure session handling
+- CORS protection
 
 ## Contributing
 
@@ -109,10 +101,8 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Acknowledgments
 
-- RFID technology documentation
-- Express.js community
-- MySQL community
-- Contributors and testers
+- Thanks to all contributors who have helped with the project
+- Special thanks to the open-source community for the tools and libraries used
 
 ## 🔒 Security
 

@@ -24,15 +24,22 @@ function updateUI() {
     const openLoginModalBtn = document.getElementById('openLoginModal');
     const userInfo = document.querySelector('.user-info');
     const logoutBtn = document.getElementById('logoutBtn');
+    const teacherNameElement = document.getElementById('teacherName');
 
-    if (teacherName) {
-        document.getElementById('teacherName').textContent = teacherName;
-        openLoginModalBtn.style.display = 'none';
-        userInfo.style.display = 'flex';
+    if (teacherName && teacherNameElement) {
+        teacherNameElement.textContent = teacherName;
+    }
+
+    if (openLoginModalBtn) {
+        openLoginModalBtn.style.display = teacherName ? 'none' : 'block';
+    }
+
+    if (userInfo) {
+        userInfo.style.display = teacherName ? 'flex' : 'none';
+    }
+
+    if (logoutBtn && teacherName) {
         logoutBtn.addEventListener('click', logout);
-    } else {
-        openLoginModalBtn.style.display = 'block';
-        userInfo.style.display = 'none';
     }
 }
 

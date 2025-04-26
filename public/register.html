@@ -4,16 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Teacher Registration - RFID Attendance System</title>
-    <link rel="stylesheet" type="text/css" href="styles.css">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
-<body>
-    <div class="header">
+<body class="login-page">
+    <div class="login-header">
         <h1>RFID Attendance System</h1>
     </div>
 
-    <div class="form-container">
-        <h2 style="text-align: center; color: #1a237e; margin-bottom: 1.5rem;">Teacher Registration</h2>
-        <form id="registerForm">
+    <div class="login-container">
+        <h2 class="login-title">Teacher Registration</h2>
+        <form id="registerForm" class="login-form">
             <div class="form-group">
                 <label for="username">Username</label>
                 <input type="text" id="username" name="username" required>
@@ -30,15 +31,15 @@
                 <label for="email">Email</label>
                 <input type="email" id="email" name="email" required>
             </div>
-            <button type="submit" class="button">Register</button>
+            <button type="submit" class="login-button">Register</button>
             <div id="errorMessage" class="error-message"></div>
         </form>
-        <div class="link">
+        <div class="register-link">
             Already have an account? <a href="/login.html">Login here</a>
         </div>
     </div>
 
-    <div class="footer">
+    <div class="login-footer">
         <p>© 2024 RFID Attendance System. All rights reserved.</p>
     </div>
     <script src="register.js"></script>
