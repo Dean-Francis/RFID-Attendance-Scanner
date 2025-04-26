@@ -23,39 +23,127 @@ function updateUI() {
     }
 }
 
-let ws;
+// Constants
+const MAX_RECONNECT_ATTEMPTS = 5;
+const MESSAGE_TIMEOUT = 3000; // 3 seconds
+const REFRESH_INTERVAL = 5000; // 5 seconds
+
+// Global WebSocket variable
+let ws = null;
 let reconnectAttempts = 0;
-const maxReconnectAttempts = 5;
-const reconnectDelay = 3000; // 3 seconds
+let reconnectTimeout = null;
+
+function showMessage(message, type = 'info') {
+    const container = document.getElementById('messageContainer');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `alert alert-${type}`;
+    messageDiv.textContent = message;
+    container.appendChild(messageDiv);
+
+    // Auto-dismiss after timeout
+    setTimeout(() => {
+        if (messageDiv.parentNode === container) {
+            container.removeChild(messageDiv);
+        }
+    }, MESSAGE_TIMEOUT);
+}
+
+function updateHardwareStatus(connected) {
+    const statusElement = document.getElementById('hardwareStatus');
+    if (statusElement) {
+        statusElement.textContent = connected ? 'Connected' : 'Disconnected';
+        statusElement.className = connected ? 'status-connected' : 'status-disconnected';
+    }
+}
 
 function setupWebSocket() {
+    if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
+        console.log('WebSocket is already connected or connecting');
+        return;
+    }
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}`;
 
-    ws = new WebSocket(wsUrl);
+    try {
+        ws = new WebSocket(wsUrl);
 
-    ws.onopen = () => {
-        console.log('WebSocket connected');
-        reconnectAttempts = 0;
-        hideError();
-        // Load initial data once connected
-        loadInitialData();
-    };
+        ws.onopen = () => {
+            console.log('WebSocket connected');
+            updateHardwareStatus(true);
+            showMessage('Connected to hardware', 'success');
+            reconnectAttempts = 0;
+            if (reconnectTimeout) {
+                clearTimeout(reconnectTimeout);
+                reconnectTimeout = null;
+            }
+        };
 
-    ws.onclose = () => {
-        if (reconnectAttempts < maxReconnectAttempts) {
-            setTimeout(setupWebSocket, reconnectDelay);
-            reconnectAttempts++;
+        ws.onclose = () => {
+            console.log('WebSocket disconnected');
+            updateHardwareStatus(false);
+            ws = null;
+
+            if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000);
+                reconnectTimeout = setTimeout(() => {
+                    reconnectAttempts++;
+                    setupWebSocket();
+                }, delay);
+            } else {
+                showMessage('Connection lost. Please refresh the page.', 'error');
+            }
+        };
+
+        ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            showMessage('Connection error occurred', 'error');
+        };
+
+        ws.onmessage = handleWebSocketMessage;
+    } catch (error) {
+        console.error('Error setting up WebSocket:', error);
+        showMessage('Failed to connect to hardware', 'error');
+    }
+}
+
+function handleWebSocketMessage(event) {
+    try {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'scan') {
+            // Only update if the scan is for the parent's child
+            const parentId = localStorage.getItem('parentId');
+            if (data.parentId === parseInt(parentId)) {
+                updateLatestScan(data);
+                showMessage(`Scan recorded for ${data.student.name}`, 'success');
+            }
+        } else if (data.type === 'error') {
+            showMessage(data.message || 'An error occurred', 'error');
         }
-    };
+    } catch (error) {
+        console.error('Error handling WebSocket message:', error);
+        showMessage('Error processing scan data', 'error');
+    }
+}
 
-    ws.onerror = () => {
-        console.error('WebSocket error occurred');
-    };
+function updateLatestScan(data) {
+    const studentElement = document.getElementById('latestStudent');
+    const statusElement = document.getElementById('latestStatus');
+    const timeElement = document.getElementById('latestTime');
 
-    ws.onmessage = (event) => {
-        handleWebSocketMessage(event.data);
-    };
+    if (studentElement && statusElement && timeElement) {
+        studentElement.textContent = data.studentName || '-';
+        statusElement.textContent = data.status || '-';
+        
+        const timestamp = data.timestamp ? new Date(data.timestamp) : new Date();
+        timeElement.textContent = timestamp.toLocaleString();
+    }
+
+    // Refresh attendance table if it exists
+    loadTodayAttendance().catch(error => {
+        console.error('Error refreshing attendance:', error);
+    });
 }
 
 // Load all initial data
@@ -155,54 +243,25 @@ async function loadTodayAttendance() {
         }
 
         const data = await response.json();
-        console.log('Received attendance data:', JSON.stringify(data, null, 2));
+        console.log('Received attendance data:', data);
 
-        const tableBody = document.getElementById('attendanceTableBody');
-        if (!tableBody) {
-            console.error('Table body not found');
-            return;
-        }
+        // Update the latest scan display instead of trying to update a non-existent table
+        if (data.length > 0) {
+            const latestRecord = data[0];
+            const latestStudent = document.getElementById('latestStudent');
+            const latestStatus = document.getElementById('latestStatus');
+            const latestTime = document.getElementById('latestTime');
 
-        if (!data || !Array.isArray(data) || data.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="3">No attendance records found for today</td></tr>';
-            return;
-        }
-
-        const rows = data.map(record => {
-            const time = record.time ? new Date(record.time).toLocaleTimeString() : '-';
-            let status, details;
-            
-            if (record.time_out) {
-                status = '<span class="status status-out">Checked Out</span>';
-                details = `Check-out time: ${new Date(record.time_out).toLocaleTimeString()}`;
-            } else {
-                status = '<span class="status status-in">Present</span>';
-                details = '-';
+            if (latestStudent) latestStudent.textContent = latestRecord.student_name || 'Unknown';
+            if (latestStatus) latestStatus.textContent = latestRecord.time_out ? 'Checked Out' : 'Checked In';
+            if (latestTime) {
+                const timestamp = new Date(latestRecord.time_out || latestRecord.time);
+                latestTime.textContent = timestamp.toLocaleTimeString();
             }
-            
-            return `
-                <tr data-student-id="${record.student_id}">
-                    <td>${time}</td>
-                    <td>${status}</td>
-                    <td>${details}</td>
-                </tr>
-            `;
-        });
-
-        tableBody.innerHTML = rows.join('');
-        
-        // Update last scan info
-        document.getElementById('lastScanTime').textContent = data[0]?.time ? 
-            new Date(data[0].time).toLocaleTimeString() : '-';
-        document.getElementById('lastStudent').textContent = data[0]?.student_name || '-';
-        
-        console.log('Updated attendance table with rows:', rows);
+        }
     } catch (error) {
         console.error('Error loading attendance:', error);
-        const tableBody = document.getElementById('attendanceTableBody');
-        if (tableBody) {
-            tableBody.innerHTML = `<tr><td colspan="3">Error loading attendance data: ${error.message}</td></tr>`;
-        }
+        showError('Error loading attendance data: ' + error.message);
     }
 }
 
@@ -253,37 +312,6 @@ async function loadNotifications() {
     }
 }
 
-// Handle WebSocket messages
-function handleWebSocketMessage(data) {
-    try {
-        const message = JSON.parse(data);
-        if (message.type === 'scan') {
-            updateLatestScan(message);
-        }
-    } catch (error) {
-        showError('Error processing message from server');
-    }
-}
-
-// Update the latest scan display
-function updateLatestScan(scanData) {
-    const latestStudent = document.getElementById('latestStudent');
-    const latestStatus = document.getElementById('latestStatus');
-    const latestTime = document.getElementById('latestTime');
-    
-    if (scanData && scanData.student) {
-        if (latestStudent) latestStudent.textContent = scanData.student.name;
-        if (latestStatus) {
-            latestStatus.textContent = scanData.status;
-            latestStatus.className = `status status-${scanData.status.toLowerCase().includes('in') ? 'in' : 'out'}`;
-        }
-        if (latestTime) {
-            const timestamp = new Date(scanData.timestamp);
-            latestTime.textContent = timestamp.toLocaleTimeString() + ' ' + timestamp.toLocaleDateString();
-        }
-    }
-}
-
 // Function to fetch and display latest scan data
 async function loadLatestScan() {
     try {
@@ -295,7 +323,7 @@ async function loadLatestScan() {
             return;
         }
 
-        const response = await fetch('/api/latest-scan', {
+        const response = await fetch(`/api/parents/${parentId}/latest-scan`, {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
@@ -313,10 +341,7 @@ async function loadLatestScan() {
                 const latestTime = document.getElementById('latestTime');
                 
                 if (latestStudent) latestStudent.textContent = 'No Data';
-                if (latestStatus) {
-                    latestStatus.className = 'status';
-                    latestStatus.textContent = 'Not Available';
-                }
+                if (latestStatus) latestStatus.textContent = 'Not Available';
                 if (latestTime) latestTime.textContent = '-';
                 return;
             }
@@ -329,63 +354,64 @@ async function loadLatestScan() {
         const latestStudent = document.getElementById('latestStudent');
         const latestStatus = document.getElementById('latestStatus');
         const latestTime = document.getElementById('latestTime');
-        const latestScanInfo = document.getElementById('latestScanInfo');
-
-        // Make sure latestScanInfo is visible
-        if (latestScanInfo) {
-            latestScanInfo.style.display = 'block';
-        }
 
         if (scanData && scanData.student) {
-            if (latestStudent) {
-                latestStudent.textContent = scanData.student.name;
-            }
-            
-            if (latestStatus) {
-                latestStatus.className = 'status';
-                const statusClass = scanData.status.toLowerCase().includes('in') ? 'status-in' : 'status-out';
-                latestStatus.classList.add(statusClass);
-                latestStatus.textContent = scanData.status;
-            }
-            
+            if (latestStudent) latestStudent.textContent = scanData.student.name;
+            if (latestStatus) latestStatus.textContent = scanData.status;
             if (latestTime) {
                 const timestamp = new Date(scanData.timestamp);
-                latestTime.textContent = timestamp.toLocaleTimeString() + ' ' + timestamp.toLocaleDateString();
+                latestTime.textContent = timestamp.toLocaleTimeString();
             }
         } else {
             if (latestStudent) latestStudent.textContent = 'No recent scans';
-            if (latestStatus) {
-                latestStatus.className = 'status';
-                latestStatus.textContent = 'N/A';
-            }
+            if (latestStatus) latestStatus.textContent = 'N/A';
             if (latestTime) latestTime.textContent = '-';
         }
     } catch (error) {
+        console.error('Error loading latest scan:', error);
         const latestStudent = document.getElementById('latestStudent');
         const latestStatus = document.getElementById('latestStatus');
         const latestTime = document.getElementById('latestTime');
         
         if (latestStudent) latestStudent.textContent = 'Error';
-        if (latestStatus) {
-            latestStatus.className = 'status';
-            latestStatus.textContent = 'Error loading data';
-        }
+        if (latestStatus) latestStatus.textContent = 'Error loading data';
         if (latestTime) latestTime.textContent = '-';
         
         showError('Error loading latest scan data');
     }
 }
 
-// Wait for DOM to be fully loaded before initializing
+// Logout functionality
+function logout() {
+    localStorage.removeItem('parentId');
+    localStorage.removeItem('parentToken');
+    window.location.href = '/parent-login.html';
+}
+
+document.getElementById('logoutButton').addEventListener('click', logout);
+
+// Initialize when page loads
 document.addEventListener('DOMContentLoaded', () => {
-    // Set up WebSocket connection
-    setupWebSocket();
+    if (!checkAuth()) {
+        return;
+    }
 
-    // Load initial data
-    loadInitialData();
-
-    // Set up periodic refresh
-    setInterval(loadLatestScan, 5000); // Refresh every 5 seconds
+    try {
+        setupWebSocket();
+        loadInitialData();
+        
+        // Set up periodic refresh
+        setInterval(() => {
+            if (!document.hidden) {
+                loadLatestScan().catch(error => {
+                    console.error('Error refreshing latest scan:', error);
+                });
+            }
+        }, REFRESH_INTERVAL);
+    } catch (error) {
+        console.error('Initialization error:', error);
+        showMessage('Failed to initialize dashboard', 'error');
+    }
 
     // Handle logout
     const logoutButton = document.getElementById('logoutButton');

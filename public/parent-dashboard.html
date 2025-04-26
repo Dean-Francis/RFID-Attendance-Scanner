@@ -6,105 +6,30 @@
     <title>Parent Dashboard - RFID Attendance System</title>
     <link rel="stylesheet" href="parent-dashboard.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <style>
-        .dashboard-container {
-            max-width: 1200px;
-            margin: 20px auto;
-            padding: 20px;
-        }
-
-        .latest-scan-section {
-            background-color: #f5f5f5;
-            padding: 20px;
-            border-radius: 8px;
-            margin: 20px 0;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        .scan-card {
-            background-color: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            margin-top: 10px;
-        }
-
-        #latestScanInfo {
-            font-size: 16px;
-            line-height: 1.6;
-        }
-
-        #latestScanInfo p {
-            margin: 12px 0;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        #latestScanInfo p span {
-            font-weight: 500;
-        }
-
-        .status {
-            display: inline-block;
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-weight: bold;
-            text-align: center;
-            min-width: 100px;
-        }
-
-        .status-in {
-            background-color: #4CAF50;
-            color: white;
-        }
-
-        .status-out {
-            background-color: #f44336;
-            color: white;
-        }
-
-        h3 {
-            color: #333;
-            margin-bottom: 15px;
-            font-size: 1.5em;
-        }
-
-        .welcome-section {
-            margin-bottom: 30px;
-        }
-
-        .welcome-section h2 {
-            color: #2196F3;
-        }
-    </style>
+    <script>
+        // Prevent duplicate function declarations from browser extensions
+        window.afterBodyReadyScreenshader = window.afterBodyReadyScreenshader || function() {};
+        window.afterBodyReady = window.afterBodyReady || function() {};
+    </script>
 </head>
 <body>
-    <div class="header">
-        <h1>RFID Attendance System</h1>
-        <div class="user-info">
-            <span id="headerParentName">Parent</span>
-            <button id="logoutButton" class="button">Logout</button>
-        </div>
-    </div>
+    <div id="messageContainer"></div>
+    
+    <div class="container">
+        <header>
+            <h1>Parent Dashboard</h1>
+            <span class="hardware-status">Hardware: <span id="hardwareStatus" class="status-disconnected">Disconnected</span></span>
+            <button id="logoutButton">Logout</button>
+        </header>
 
-    <div class="dashboard-container">
-        <div class="welcome-section">
-            <h2>Welcome, <span id="welcomeParentName">Parent</span></h2>
-        </div>
-
-        <div class="latest-scan-section">
+        <div id="latestScanDisplay">
             <h3>Latest Scan</h3>
-            <div class="scan-card">
-                <div id="latestScanInfo">
-                    <p><strong>Student:</strong> <span id="latestStudent">-</span></p>
-                    <p><strong>Status:</strong> <span id="latestStatus" class="status">-</span></p>
-                    <p><strong>Time:</strong> <span id="latestTime">-</span></p>
-                </div>
-            </div>
+            <p>Student: <span id="latestStudent">-</span></p>
+            <p>Status: <span id="latestStatus">-</span></p>
+            <p>Time: <span id="latestTime">-</span></p>
         </div>
 
-        <div class="student-info">
+        <div id="studentInfo">
             <h3>Student Information</h3>
             <div id="studentDetails" class="info-card">Loading...</div>
         </div>

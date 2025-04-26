@@ -7,6 +7,7 @@ document.getElementById('parentRegisterForm').addEventListener('submit', async f
     const email = document.getElementById('email').value.trim();
     const phone = document.getElementById('phone').value.trim();
     const studentId = document.getElementById('studentId').value.trim();
+    const cardId = document.getElementById('cardId').value.trim();
     const relationship = document.getElementById('relationship').value;
     const errorMessage = document.getElementById('errorMessage');
     
@@ -14,8 +15,14 @@ document.getElementById('parentRegisterForm').addEventListener('submit', async f
     errorMessage.textContent = '';
     
     // Validate inputs
-    if (!username || !password || !name || !email || !phone || !studentId || !relationship) {
-        errorMessage.textContent = 'All fields are required';
+    if (!username || !password || !name || !email || !phone || !relationship) {
+        errorMessage.textContent = 'All fields except Student ID or Card ID are required';
+        return;
+    }
+
+    // Validate that at least one ID is provided
+    if (!studentId && !cardId) {
+        errorMessage.textContent = 'Either Student ID or Card ID must be provided';
         return;
     }
     
@@ -33,6 +40,7 @@ document.getElementById('parentRegisterForm').addEventListener('submit', async f
                 email,
                 phone,
                 studentId,
+                cardId,
                 relationship
             })
         });
@@ -41,7 +49,7 @@ document.getElementById('parentRegisterForm').addEventListener('submit', async f
         
         if (response.ok) {
             // Registration successful
-            alert('Registration successful! Please login to access your account.');
+            alert(`Registration successful! Your account has been linked to ${data.studentName}. Please login to access your account.`);
             window.location.href = '/parent-login.html';
         } else {
             // Display error message

@@ -51,7 +51,7 @@ let attendanceRecords = [];
 // Function to handle RFID scan
 async function handleRFIDScan(studentId) {
     try {
-        const response = await fetch(`${API_BASE_URL}/attendance`, {
+        const response = await fetch('/api/scan', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -59,38 +59,73 @@ async function handleRFIDScan(studentId) {
             body: JSON.stringify({ studentId })
         });
 
-        const data = await response.json();
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Failed to process scan');
+        }
 
-        if (response.ok) {
-            // Create a combined record with both attendance and student info
-            const combinedRecord = {
-                ...data.attendance,
-                name: data.student.name,
-                grade: data.student.grade,
-                parent_phone: data.student.parent_phone
-            };
-            
-            // Update attendance records with the combined record
-            attendanceRecords.unshift(combinedRecord);
-            updateAttendanceTable();
-            updateLastScan(data.student.name, data.attendance.time, data.attendance.status);
-            sendParentNotification(data.student);
-        } else {
-            // Handle specific error messages
-            if (response.status === 503) {
-                alert('Database connection error. Please check if the database server is running.');
-            } else {
-                alert(data.message || 'Error recording attendance');
-            }
+        const data = await response.json();
+        
+        // Update the latest scan display
+        const latestScanDisplay = document.getElementById('latestScanDisplay');
+        if (latestScanDisplay) {
+            latestScanDisplay.innerHTML = `
+                <p><strong>Student:</strong> ${data.studentName}</p>
+                <p><strong>Status:</strong> ${data.status}</p>
+                <p><strong>Time:</strong> ${new Date(data.timestamp).toLocaleTimeString()}</p>
+            `;
         }
+
+        // Play success sound
+        const successSound = new Audio('/sounds/success.mp3');
+        successSound.play().catch(err => console.warn('Could not play sound:', err));
+
+        // Show success message
+        showMessage('Scan processed successfully', 'success');
+
+        // Refresh attendance table if it exists
+        const attendanceTable = document.getElementById('attendanceTable');
+        if (attendanceTable) {
+            loadTodayAttendance();
+        }
+
     } catch (error) {
-        console.error('Error:', error);
-        if (error.message.includes('Failed to fetch')) {
-            alert('Cannot connect to the server. Please check if the server is running.');
-        } else {
-            alert('Error recording attendance: ' + error.message);
-        }
+        console.error('Scan error:', error);
+        showMessage(error.message || 'Error processing scan', 'error');
+        
+        // Play error sound
+        const errorSound = new Audio('/sounds/error.mp3');
+        errorSound.play().catch(err => console.warn('Could not play sound:', err));
     }
+}
+
+// Helper function to show messages
+function showMessage(message, type = 'info') {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `alert alert-${type}`;
+    messageDiv.textContent = message;
+    
+    // Find or create message container
+    let messageContainer = document.getElementById('messageContainer');
+    if (!messageContainer) {
+        messageContainer = document.createElement('div');
+        messageContainer.id = 'messageContainer';
+        messageContainer.style.position = 'fixed';
+        messageContainer.style.top = '20px';
+        messageContainer.style.right = '20px';
+        messageContainer.style.zIndex = '1000';
+        document.body.appendChild(messageContainer);
+    }
+    
+    messageContainer.appendChild(messageDiv);
+    
+    // Remove message after 3 seconds
+    setTimeout(() => {
+        messageDiv.remove();
+        if (messageContainer.children.length === 0) {
+            messageContainer.remove();
+        }
+    }, 3000);
 }
 
 // Update the attendance table
@@ -171,6 +206,11 @@ function updateBatteryStatus() {
     const batterySlider = document.getElementById('batteryLevel');
     const batteryValue = document.getElementById('batteryValue');
     
+    // Add null checks for required elements
+    if (!batteryLevelElement || !solarStatusElement || !batterySlider || !batteryValue) {
+        return; // Exit if any required element is missing
+    }
+
     // Update battery level based on solar status
     const currentTime = Date.now();
     const timeDiff = (currentTime - lastUpdateTime) / 1000;
@@ -203,52 +243,257 @@ function updateBatteryStatus() {
     }
 
     const solarIndicator = document.querySelector('.status-indicator.charging');
-    if (isCharging) {
-        solarIndicator.style.backgroundColor = 'var(--success-color)';
-    } else {
-        solarIndicator.style.backgroundColor = 'var(--warning-color)';
+    if (solarIndicator) {
+        solarIndicator.style.backgroundColor = isCharging ? 'var(--success-color)' : 'var(--warning-color)';
     }
 }
 
 // Initialize the system
 document.addEventListener('DOMContentLoaded', async () => {
+    if (!checkAuth()) {
+        return;
+    }
+    updateUI();
+    
     // Start battery simulation
     setInterval(updateBatteryStatus, 1000);
 
     // Handle battery slider changes
-    document.getElementById('batteryLevel').addEventListener('input', function() {
-        batteryLevel = parseInt(this.value);
-        document.getElementById('batteryValue').textContent = `${batteryLevel}%`;
-    });
+    const batteryLevelSlider = document.getElementById('batteryLevel');
+    const batteryValueDisplay = document.getElementById('batteryValue');
+    if (batteryLevelSlider) {
+        batteryLevelSlider.addEventListener('input', function() {
+            batteryLevel = parseInt(this.value);
+            if (batteryValueDisplay) {
+                batteryValueDisplay.textContent = `${batteryLevel}%`;
+            }
+        });
+    }
 
     // Handle solar status changes
-    document.getElementById('solarStatus').addEventListener('change', function() {
-        updateBatteryStatus();
-    });
+    const solarStatusElement = document.getElementById('solarStatus');
+    if (solarStatusElement) {
+        solarStatusElement.addEventListener('change', updateBatteryStatus);
+    }
 
-    // Handle simulate scan button
-    document.getElementById('simulateScan').addEventListener('click', function() {
-        const studentId = document.getElementById('simulatorStudentId').value;
-        if (studentId) {
-            handleRFIDScan(studentId);
-            document.getElementById('simulatorStudentId').value = ''; // Clear input after scan
-        } else {
-            alert('Please enter a student ID');
+    // Modal elements
+    const modal = document.getElementById('addStudentModal');
+    const openModalBtn = document.getElementById('addStudentBtn');
+    const closeModalBtn = document.getElementById('closeModal');
+    const addStudentForm = document.getElementById('addStudentForm');
+    const messageDiv = document.getElementById('message');
+    const loginModal = document.getElementById('loginModal');
+    const openLoginModalBtn = document.getElementById('openLoginModal');
+    const closeLoginModalBtn = document.getElementById('closeLoginModal');
+    const loginForm = document.getElementById('loginForm');
+    const newParentPhone = document.getElementById('newParentPhone');
+
+    // Add Student Modal handlers
+    if (openModalBtn && modal && addStudentForm && messageDiv) {
+        openModalBtn.addEventListener('click', () => {
+            modal.style.display = 'block';
+            modal.setAttribute('aria-hidden', 'false');
+            const newStudentId = document.getElementById('newStudentId');
+            if (newStudentId) newStudentId.focus();
+        });
+
+        if (closeModalBtn) {
+            closeModalBtn.addEventListener('click', () => {
+                modal.style.display = 'none';
+                modal.setAttribute('aria-hidden', 'true');
+                addStudentForm.reset();
+                messageDiv.textContent = '';
+            });
         }
-    });
 
-    // Handle Enter key in student ID input
-    document.getElementById('simulatorStudentId').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
+        // Close modal when clicking outside
+        window.addEventListener('click', (event) => {
+            if (event.target === modal) {
+                modal.style.display = 'none';
+                modal.setAttribute('aria-hidden', 'true');
+                addStudentForm.reset();
+                messageDiv.textContent = '';
+            }
+        });
+
+        // Add new student form handler
+        addStudentForm.addEventListener('submit', async function(e) {
             e.preventDefault();
-            document.getElementById('simulateScan').click();
-        }
-    });
+            console.log('Form submitted');
+            
+            const studentId = document.getElementById('newStudentId').value;
+            const name = document.getElementById('newStudentName').value;
+            const grade = document.getElementById('newStudentGrade').value;
+            const parentPhone = document.getElementById('newParentPhone').value;
+            
+            // Validate student ID is not empty
+            if (!studentId) {
+                messageDiv.textContent = 'Student ID is required';
+                messageDiv.className = 'message error';
+                return;
+            }
+            
+            // Validate UAE phone number format
+            const phoneRegex = /^05[0-9][\s-]?[0-9]{3}[\s-]?[0-9]{4}$/;
+            if (!phoneRegex.test(parentPhone)) {
+                messageDiv.textContent = 'Phone number must start with 05X followed by 7 digits (e.g. 050 123 4567 or 0501234567)';
+                messageDiv.className = 'message error';
+                return;
+            }
+
+            const formData = {
+                student_id: studentId.trim(),
+                name: name.trim(),
+                grade: grade.trim(),
+                parent_phone: parentPhone.trim()
+            };
+            console.log('Form data:', formData);
+
+            try {
+                console.log('Sending request to /api/students');
+                const response = await fetch(`${API_BASE_URL}/students`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+                console.log('Request sent with data:', JSON.stringify(formData));
+                console.log('Response status:', response.status);
+                const data = await response.json();
+                console.log('Response data:', data);
+
+                if (response.ok) {
+                    messageDiv.textContent = 'Student added successfully!';
+                    messageDiv.className = 'message success';
+                    addStudentForm.reset();
+                    setTimeout(() => {
+                        modal.style.display = 'none';
+                        messageDiv.textContent = '';
+                        document.body.style.overflow = 'auto';
+                    }, 2000);
+                } else {
+                    messageDiv.textContent = data.error || 'Error adding student';
+                    messageDiv.className = 'message error';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                messageDiv.textContent = 'Error connecting to server';
+                messageDiv.className = 'message error';
+            }
+        });
+    }
+
+    // Login Modal handlers
+    if (openLoginModalBtn && loginModal && closeLoginModalBtn && loginForm) {
+        openLoginModalBtn.addEventListener('click', () => {
+            loginModal.style.display = 'block';
+        });
+
+        closeLoginModalBtn.addEventListener('click', () => {
+            loginModal.style.display = 'none';
+        });
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username');
+            const password = document.getElementById('password');
+            const messageDiv = document.getElementById('loginMessage');
+
+            if (!username || !password || !messageDiv) return;
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        username: username.value, 
+                        password: password.value 
+                    }),
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    messageDiv.className = 'message success';
+                    messageDiv.textContent = 'Login successful!';
+                    setTimeout(() => {
+                        loginModal.style.display = 'none';
+                    }, 1000);
+                } else {
+                    messageDiv.className = 'message error';
+                    messageDiv.textContent = 'Invalid username or password.';
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                messageDiv.className = 'message error';
+                messageDiv.textContent = 'Error connecting to server';
+            }
+        });
+    }
+
+    // Phone number format helper
+    if (newParentPhone) {
+        newParentPhone.addEventListener('input', function(e) {
+            // Remove all non-digit characters
+            let value = e.target.value.replace(/\D/g, '');
+            
+            // Format the number as 05X XXX XXXX
+            if (value.length > 0) {
+                // Ensure it starts with 05
+                if (!value.startsWith('05')) {
+                    value = '05';
+                } else {
+                    // Format as 05X XXX XXXX
+                    if (value.length > 3) {
+                        value = value.substring(0, 3) + ' ' + value.substring(3);
+                    }
+                    if (value.length > 7) {
+                        value = value.substring(0, 7) + ' ' + value.substring(7);
+                    }
+                    // Limit to 11 digits (05X XXX XXXX)
+                    if (value.replace(/\D/g, '').length > 10) {
+                        value = value.substring(0, 12);
+                    }
+                }
+            }
+            
+            // Update the input value
+            e.target.value = value;
+        });
+    }
+
+    // Handle simulate scan functionality
+    const simulateScanBtn = document.getElementById('simulateScan');
+    const simulatorStudentIdInput = document.getElementById('simulatorStudentId');
+    if (simulateScanBtn && simulatorStudentIdInput) {
+        simulateScanBtn.addEventListener('click', function() {
+            const studentId = simulatorStudentIdInput.value;
+            if (studentId) {
+                handleRFIDScan(studentId);
+                simulatorStudentIdInput.value = ''; // Clear input after scan
+            } else {
+                alert('Please enter a student ID');
+            }
+        });
+
+        // Handle Enter key in student ID input
+        simulatorStudentIdInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                simulateScanBtn.click();
+            }
+        });
+    }
 
     // Toggle notifications button
-    document.getElementById('toggleNotifications').addEventListener('click', function() {
-        this.textContent = this.textContent === 'Enabled' ? 'Disabled' : 'Enabled';
-    });
+    const toggleNotificationsBtn = document.getElementById('toggleNotifications');
+    if (toggleNotificationsBtn) {
+        toggleNotificationsBtn.addEventListener('click', function() {
+            this.textContent = this.textContent === 'Enabled' ? 'Disabled' : 'Enabled';
+        });
+    }
 
     // Set default date range (today) - only if we're on the reports page
     const startDateInput = document.getElementById('startDate');
@@ -280,40 +525,6 @@ async function loadAttendanceByDateRange(startDate, endDate) {
     }
 }
 
-// Modal functionality
-const modal = document.getElementById('addStudentModal');
-const openModalBtn = document.getElementById('addStudentBtn');
-const closeModalBtn = document.getElementById('closeModal');
-const addStudentForm = document.getElementById('addStudentForm');
-const messageDiv = document.getElementById('message');
-
-// Open modal
-openModalBtn.addEventListener('click', () => {
-    console.log('Opening modal');
-    modal.style.display = 'block';
-    document.body.style.overflow = 'hidden';
-});
-
-// Close modal
-closeModalBtn.addEventListener('click', () => {
-    console.log('Closing modal');
-    modal.style.display = 'none';
-    document.body.style.overflow = 'auto';
-    addStudentForm.reset();
-    messageDiv.textContent = '';
-});
-
-// Close modal when clicking outside
-window.addEventListener('click', (event) => {
-    if (event.target === modal) {
-        console.log('Closing modal (clicked outside)');
-        modal.style.display = 'none';
-        document.body.style.overflow = 'auto';
-        addStudentForm.reset();
-        messageDiv.textContent = '';
-    }
-});
-
 // Check if student ID already exists
 async function checkStudentIdExists(studentId) {
     try {
@@ -324,146 +535,3 @@ async function checkStudentIdExists(studentId) {
         return false;
     }
 }
-
-// Add phone number format helper
-document.getElementById('newParentPhone').addEventListener('input', function(e) {
-    // Remove all non-digit characters
-    let value = e.target.value.replace(/\D/g, '');
-    
-    // Format the number as 05X XXX XXXX
-    if (value.length > 0) {
-        // Ensure it starts with 05
-        if (!value.startsWith('05')) {
-            value = '05';
-        } else {
-            // Format as 05X XXX XXXX
-            if (value.length > 3) {
-                value = value.substring(0, 3) + ' ' + value.substring(3);
-            }
-            if (value.length > 7) {
-                value = value.substring(0, 7) + ' ' + value.substring(7);
-            }
-            // Limit to 11 digits (05X XXX XXXX)
-            if (value.replace(/\D/g, '').length > 10) {
-                value = value.substring(0, 12);
-            }
-        }
-    }
-    
-    // Update the input value
-    e.target.value = value;
-});
-
-// Add new student form handler
-addStudentForm.addEventListener('submit', async function(e) {
-    e.preventDefault();
-    console.log('Form submitted');
-    
-    const studentId = document.getElementById('newStudentId').value;
-    const name = document.getElementById('newStudentName').value;
-    const grade = document.getElementById('newStudentGrade').value;
-    const parentPhone = document.getElementById('newParentPhone').value;
-    
-    // Validate student ID is not empty
-    if (!studentId) {
-        messageDiv.textContent = 'Student ID is required';
-        messageDiv.className = 'message error';
-        return;
-    }
-    
-    // Validate UAE phone number format
-    const phoneRegex = /^05[0-9][\s-]?[0-9]{3}[\s-]?[0-9]{4}$/;
-    if (!phoneRegex.test(parentPhone)) {
-        messageDiv.textContent = 'Phone number must start with 05X followed by 7 digits (e.g. 050 123 4567 or 0501234567)';
-        messageDiv.className = 'message error';
-        return;
-    }
-
-    const formData = {
-        student_id: studentId.trim(),
-        name: name.trim(),
-        grade: grade.trim(),
-        parent_phone: parentPhone.trim()
-    };
-    console.log('Form data:', formData);
-
-    try {
-        console.log('Sending request to /api/students');
-        const response = await fetch(`${API_BASE_URL}/students`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify(formData)
-        });
-        console.log('Request sent with data:', JSON.stringify(formData));
-        console.log('Response status:', response.status);
-        const data = await response.json();
-        console.log('Response data:', data);
-
-        if (response.ok) {
-            messageDiv.textContent = 'Student added successfully!';
-            messageDiv.className = 'message success';
-            addStudentForm.reset();
-            setTimeout(() => {
-                modal.style.display = 'none';
-                messageDiv.textContent = '';
-                document.body.style.overflow = 'auto';
-            }, 2000);
-        } else {
-            messageDiv.textContent = data.error || 'Error adding student';
-            messageDiv.className = 'message error';
-        }
-    } catch (error) {
-        console.error('Error:', error);
-        messageDiv.textContent = 'Error connecting to server';
-        messageDiv.className = 'message error';
-    }
-});
-
-document.getElementById('addStudentBtn').addEventListener('click', () => {
-    const modal = document.getElementById('addStudentModal');
-    modal.style.display = 'block';
-    modal.setAttribute('aria-hidden', 'false');
-    document.getElementById('newStudentId').focus();
-});
-
-document.getElementById('closeModal').addEventListener('click', () => {
-    const modal = document.getElementById('addStudentModal');
-    modal.style.display = 'none';
-    modal.setAttribute('aria-hidden', 'true');
-});
-
-document.getElementById('openLoginModal').addEventListener('click', () => {
-    document.getElementById('loginModal').style.display = 'block';
-});
-
-document.getElementById('closeLoginModal').addEventListener('click', () => {
-    document.getElementById('loginModal').style.display = 'none';
-});
-
-document.getElementById('loginForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const username = document.getElementById('username').value;
-    const password = document.getElementById('password').value;
-
-    const response = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-    });
-
-    const result = await response.json();
-    const messageDiv = document.getElementById('loginMessage');
-    if (result.success) {
-        messageDiv.className = 'message success';
-        messageDiv.textContent = 'Login successful!';
-        setTimeout(() => {
-            document.getElementById('loginModal').style.display = 'none';
-        }, 1000);
-    } else {
-        messageDiv.className = 'message error';
-        messageDiv.textContent = 'Invalid username or password.';
-    }
-});

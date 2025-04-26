@@ -28,18 +28,44 @@ app.use(session({
 
 // Authentication middleware
 const authenticateParent = async (req, res, next) => {
-    const token = req.headers.authorization?.split(' ')[1];
-    
-    if (!token) {
-        return res.status(401).json({ message: 'No token provided' });
-    }
-
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-        req.parentId = decoded.id;
-        next();
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ error: 'No token provided' });
+        }
+
+        const token = authHeader.split(' ')[1];
+        if (!token) {
+            return res.status(401).json({ error: 'Invalid token format' });
+        }
+
+        try {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+            req.parentId = decoded.id;
+            
+            // Verify the parent exists
+            const [parents] = await connection.promise().query(
+                'SELECT id FROM parents WHERE id = ?',
+                [decoded.id]
+            );
+
+            if (parents.length === 0) {
+                return res.status(401).json({ error: 'Parent not found' });
+            }
+
+            next();
+        } catch (err) {
+            if (err.name === 'TokenExpiredError') {
+                return res.status(401).json({ error: 'Token expired' });
+            }
+            if (err.name === 'JsonWebTokenError') {
+                return res.status(401).json({ error: 'Invalid token' });
+            }
+            throw err;
+        }
     } catch (error) {
-        return res.status(401).json({ message: 'Invalid token' });
+        console.error('Authentication error:', error);
+        return res.status(500).json({ error: 'Internal server error during authentication' });
     }
 };
 
@@ -97,6 +123,7 @@ function initializeTables() {
         `CREATE TABLE IF NOT EXISTS students (
             id INT PRIMARY KEY AUTO_INCREMENT,
             student_id VARCHAR(50) NOT NULL UNIQUE,
+            card_id VARCHAR(50) UNIQUE,
             name VARCHAR(100) NOT NULL,
             grade VARCHAR(20),
             parent_phone VARCHAR(20),
@@ -115,6 +142,7 @@ function initializeTables() {
             parent_id INT,
             student_id VARCHAR(50),
             relationship VARCHAR(50),
+            FOREIGN KEY (parent_id) REFERENCES parents(id) ON DELETE CASCADE,
             FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
         )`,
         `CREATE TABLE IF NOT EXISTS notifications (
@@ -519,54 +547,50 @@ app.get('/api/attendance/range', (req, res) => {
     });
 });
 
-// Add new student
-app.post('/api/students', (req, res) => {
-    const { student_id, name, grade, parent_phone } = req.body;
+// Add/Update student endpoint
+app.post('/api/students', async (req, res) => {
+    const { student_id, card_id, name, grade, parent_phone } = req.body;
     
-    // First check if student exists
-    connection.query('SELECT * FROM students WHERE student_id = ?', [student_id], (err, results) => {
-        if (err) {
-            console.error('Error checking student:', err);
-            res.status(500).json({ error: 'Database error', details: err.message });
-            return;
+    if (!student_id || !name || !grade) {
+        return res.status(400).json({ error: 'Student ID, name, and grade are required' });
+    }
+
+    try {
+        // Check if student exists by either student_id or card_id
+        const [existingStudents] = await connection.promise().query(
+            'SELECT * FROM students WHERE student_id = ? OR (card_id = ? AND card_id IS NOT NULL)',
+            [student_id, card_id]
+        );
+
+        if (existingStudents.length > 0) {
+            const student = existingStudents[0];
+            if (student.student_id === student_id) {
+                return res.status(400).json({ error: 'Student ID already exists' });
+            } else {
+                return res.status(400).json({ error: 'Card ID already exists' });
+            }
         }
-        
-        if (results.length > 0) {
-            // Student exists, update the record
-            connection.query(
-                'UPDATE students SET name = ?, grade = ?, parent_phone = ? WHERE student_id = ?',
-                [name, grade, parent_phone, student_id],
-                (err, result) => {
-                    if (err) {
-                        console.error('Error updating student:', err);
-                        res.status(500).json({ error: 'Database error', details: err.message });
-                        return;
-                    }
-                    res.status(200).json({ 
-                        message: 'Student updated successfully',
-                        student: { student_id, name, grade, parent_phone }
-                    });
-                }
-            );
-        } else {
-            // Student doesn't exist, create new record
-            connection.query(
-                'INSERT INTO students (student_id, name, grade, parent_phone) VALUES (?, ?, ?, ?)',
-                [student_id, name, grade, parent_phone],
-                (err, result) => {
-                    if (err) {
-                        console.error('Error adding student:', err);
-                        res.status(500).json({ error: 'Database error', details: err.message });
-                        return;
-                    }
-                    res.status(201).json({ 
-                        message: 'Student added successfully',
-                        student: { student_id, name, grade, parent_phone }
-                    });
-                }
-            );
-        }
-    });
+
+        // Insert new student
+        const [result] = await connection.promise().query(
+            'INSERT INTO students (student_id, card_id, name, grade, parent_phone) VALUES (?, ?, ?, ?, ?)',
+            [student_id, card_id, name, grade, parent_phone]
+        );
+
+        res.status(201).json({ 
+            message: 'Student added successfully',
+            student: { 
+                student_id, 
+                card_id,
+                name, 
+                grade, 
+                parent_phone 
+            }
+        });
+    } catch (error) {
+        console.error('Error adding student:', error);
+        res.status(500).json({ error: 'Database error', details: error.message });
+    }
 });
 
 app.post('/api/login', async (req, res) => {
@@ -756,9 +780,22 @@ app.post('/api/parents/login', async (req, res) => {
 
         // Create JWT token
         const token = jwt.sign(
-            { id: parent.id, username: parent.username },
-            'your-secret-key',
+            { 
+                id: parent.id, 
+                username: parent.username,
+                type: 'parent'
+            },
+            process.env.JWT_SECRET || 'your-secret-key',
             { expiresIn: '24h' }
+        );
+
+        // Get the parent's students
+        const [students] = await connection.promise().query(
+            `SELECT s.name, s.student_id, s.grade 
+             FROM students s
+             JOIN parent_student ps ON s.student_id = ps.student_id
+             WHERE ps.parent_id = ?`,
+            [parent.id]
         );
 
         res.json({
@@ -766,7 +803,8 @@ app.post('/api/parents/login', async (req, res) => {
             parent: {
                 id: parent.id,
                 name: parent.name,
-                email: parent.email
+                email: parent.email,
+                students: students
             },
             token
         });
@@ -780,12 +818,12 @@ app.post('/api/parents/login', async (req, res) => {
 app.post('/api/parents/register', async (req, res) => {
     console.log('Parent registration request received:', req.body);
     
-    const { username, password, name, email, phone, studentId, relationship } = req.body;
+    const { username, password, name, email, phone, studentId, cardId, relationship } = req.body;
     
     // Validate required fields
-    if (!username || !password || !name || !email || !phone || !studentId || !relationship) {
+    if (!username || !password || !name || !email || !phone || (!studentId && !cardId) || !relationship) {
         console.error('Registration error: Missing required fields');
-        return res.status(400).json({ error: 'All fields are required' });
+        return res.status(400).json({ error: 'All fields are required. Either Student ID or Card ID must be provided.' });
     }
 
     try {
@@ -807,15 +845,17 @@ app.post('/api/parents/register', async (req, res) => {
             }
         }
 
-        // Check if student exists
+        // Check if student exists by either student ID or card ID
         const [students] = await connection.promise().query(
-            'SELECT * FROM students WHERE student_id = ?',
-            [studentId]
+            'SELECT * FROM students WHERE student_id = ? OR (card_id = ? AND card_id IS NOT NULL)',
+            [studentId, cardId]
         );
 
         if (students.length === 0) {
-            return res.status(400).json({ error: 'Student ID not found' });
+            return res.status(400).json({ error: 'Student not found. Please verify the Student ID or Card ID.' });
         }
+
+        const student = students[0];
 
         // Hash password
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -831,15 +871,18 @@ app.post('/api/parents/register', async (req, res) => {
                 [username, hashedPassword, name, email, phone]
             );
 
-            // Link parent to student using student_id
+            // Link parent to student
             await conn.query(
                 'INSERT INTO parent_student (parent_id, student_id, relationship) VALUES (?, ?, ?)',
-                [parentResult.insertId, studentId, relationship]
+                [parentResult.insertId, student.student_id, relationship]
             );
 
             await conn.commit();
             console.log('Parent registered successfully:', { username, name, email });
-            res.status(201).json({ message: 'Parent registered successfully' });
+            res.status(201).json({ 
+                message: 'Parent registered successfully',
+                studentName: student.name
+            });
         } catch (error) {
             await conn.rollback();
             console.error('Transaction error:', error);
@@ -1151,6 +1194,61 @@ app.post('/index.html', async (req, res) => {
     } catch (error) {
         console.error('Error processing RFID scan:', error);
         return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Get parent's latest scan
+app.get('/api/parents/:parentId/latest-scan', authenticateParent, async (req, res) => {
+    try {
+        // Verify the parent is requesting their own data
+        if (req.parentId !== parseInt(req.params.parentId)) {
+            return res.status(403).json({ error: 'Unauthorized access' });
+        }
+
+        // First get the student IDs associated with this parent
+        const [parentStudents] = await connection.promise().query(
+            'SELECT student_id FROM parent_student WHERE parent_id = ?',
+            [req.parentId]
+        );
+        
+        if (parentStudents.length === 0) {
+            return res.status(404).json({ error: 'No students found for this parent' });
+        }
+        
+        const studentIds = parentStudents.map(ps => ps.student_id);
+        
+        // Get the most recent attendance record for any of the parent's children
+        const [latestAttendance] = await connection.promise().query(`
+            SELECT a.*, s.name, s.grade 
+            FROM attendance a 
+            JOIN students s ON a.student_id = s.student_id 
+            WHERE a.student_id IN (?)
+            ORDER BY COALESCE(a.time_out, a.time) DESC 
+            LIMIT 1
+        `, [studentIds]);
+
+        if (latestAttendance.length === 0) {
+            return res.status(404).json({ error: 'No scan data available' });
+        }
+
+        const record = latestAttendance[0];
+        const response = {
+            type: 'scan',
+            parentId: req.parentId,
+            student: {
+                student_id: record.student_id,
+                name: record.name,
+                grade: record.grade
+            },
+            status: record.time_out ? 'Checked Out' : 'Checked In',
+            timestamp: record.time_out || record.time,
+            message: `${record.name} has ${record.time_out ? 'checked out' : 'checked in'}`
+        };
+
+        res.json(response);
+    } catch (error) {
+        console.error('Error fetching latest scan:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
